@@ -1,7 +1,8 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, handleError } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { isAdmin } from "@/lib/supabase/utils";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,9 +29,10 @@ export function LoginForm({
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
     setIsLoading(true);
     setError(null);
+
+    const supabase = createClient();
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -38,10 +40,16 @@ export function LoginForm({
         password,
       });
       if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/protected");
+
+      const { data: { user } } = await supabase.auth.getUser();
+      const redirectPath = user && await isAdmin(user.id) 
+        ? "/admin/complaints" 
+        : "/";
+      
+      router.push(redirectPath);
+      router.refresh();
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      setError(handleError(error));
     } finally {
       setIsLoading(false);
     }
@@ -51,15 +59,15 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
+          <CardTitle className="text-2xl">Welcome to ZamboSenti</CardTitle>
           <CardDescription>
-            Enter your email below to login to your account
+            Login to file complaints and track their status in Zamboanga City
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin}>
             <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
+              <div className="grid gap-2" suppressHydrationWarning>
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
@@ -68,9 +76,10 @@ export function LoginForm({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  suppressHydrationWarning
                 />
               </div>
-              <div className="grid gap-2">
+              <div className="grid gap-2" suppressHydrationWarning>
                 <div className="flex items-center">
                   <Label htmlFor="password">Password</Label>
                   <Link
@@ -86,6 +95,7 @@ export function LoginForm({
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  suppressHydrationWarning
                 />
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}

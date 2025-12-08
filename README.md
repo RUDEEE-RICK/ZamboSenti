@@ -1,41 +1,44 @@
-<a href="https://demo-nextjs-with-supabase.vercel.app/">
-  <img alt="Next.js and Supabase Starter Kit - the fastest way to build apps with Next.js and Supabase" src="https://demo-nextjs-with-supabase.vercel.app/opengraph-image.png">
-  <h1 align="center">Next.js and Supabase Starter Kit</h1>
-</a>
+<h1 align="center">ZamboSenti</h1>
 
 <p align="center">
- The fastest way to build apps with Next.js and Supabase
+ <strong>Ez File Complaint</strong>
+</p>
+
+<p align="center">
+A citizen-focused web application that enables residents to file complaints online quickly and securely. It streamlines the reporting process by allowing users to submit issues related to public services, infrastructure, or community concerns without needing to visit government offices in person.
 </p>
 
 <p align="center">
   <a href="#features"><strong>Features</strong></a> ·
-  <a href="#demo"><strong>Demo</strong></a> ·
-  <a href="#deploy-to-vercel"><strong>Deploy to Vercel</strong></a> ·
-  <a href="#clone-and-run-locally"><strong>Clone and run locally</strong></a> ·
-  <a href="#feedback-and-issues"><strong>Feedback and issues</strong></a>
-  <a href="#more-supabase-examples"><strong>More Examples</strong></a>
+  <a href="#target-users"><strong>Target Users</strong></a> ·
+  <a href="#benefits"><strong>Benefits</strong></a> ·
+  <a href="#tech-stack"><strong>Tech Stack</strong></a>
 </p>
 <br/>
 
 ## Features
 
-- Works across the entire [Next.js](https://nextjs.org) stack
-  - App Router
-  - Pages Router
-  - Middleware
-  - Client
-  - Server
-  - It just works!
-- supabase-ssr. A package to configure Supabase Auth to use cookies
-- Password-based authentication block installed via the [Supabase UI Library](https://supabase.com/ui/docs/nextjs/password-based-auth)
-- Styling with [Tailwind CSS](https://tailwindcss.com)
-- Components with [shadcn/ui](https://ui.shadcn.com/)
-- Optional deployment with [Supabase Vercel Integration and Vercel deploy](#deploy-your-own)
-  - Environment variables automatically assigned to Vercel project
+- **Simple and intuitive complaint filing interface** - Easy-to-use form for submitting complaints
+- **Secure authentication for citizens** - Password-based authentication with email verification
+- **Comprehensive complaint details** - Attach location, category, and detailed descriptions
+- **Image upload support** - Strengthen complaint reports with supporting images
+- **Track complaint status** - Monitor complaint progress (pending, processing, solved)
+- **Admin dashboard** - Government administrators can manage and update complaint statuses
+- **Real-time updates** - Citizens receive status updates on their submitted complaints
 
-## Demo
+## Target Users
 
-You can view a fully working demo at [demo-nextjs-with-supabase.vercel.app](https://demo-nextjs-with-supabase.vercel.app/).
+- **Citizens** seeking to report issues related to public services, infrastructure, or community concerns
+- **Local government administrators** managing and resolving complaints
+
+## Benefits
+
+- **Reduces time and effort** for citizens by eliminating the need to visit government offices
+- **Improves transparency and accountability** in complaint handling
+- **Provides real-time status updates** on complaint resolution progress
+- **Centralizes complaint data** for better decision-making and resource allocation
+
+## Tech Stack
 
 ## Deploy to Vercel
 
