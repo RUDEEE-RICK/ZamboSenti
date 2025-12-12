@@ -51,6 +51,14 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        vinta: {
+          cyan: "#69C4E0",
+          orange: "#F59526",
+          yellow: "#FBC913",
+          pink: "#EE78AC",
+          purple: "#A76398",
+          green: "#83BC39",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -129,7 +129,7 @@ export function NewsList({ maxArticles = 5, showViewAll = true }: NewsListProps)
                             />
                         </div>
                     ) : (
-                        <div className="w-full h-48 bg-gradient-to-br from-primary via-teal-600 to-cyan-700 relative">
+                        <div className="w-full h-48 bg-gradient-to-br from-primary via-secondary to-accent relative">
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="text-white text-center p-6">
                                     <div className="text-lg font-bold uppercase">
@@ -137,6 +137,7 @@ export function NewsList({ maxArticles = 5, showViewAll = true }: NewsListProps)
                                     </div>
                                 </div>
                             </div>
+                            <div className="absolute right-0 top-0 h-full w-1/2 opacity-20 pointer-events-none bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#fff_10px,#fff_20px)]" />
                         </div>
                     )}
                     <div className="p-4">

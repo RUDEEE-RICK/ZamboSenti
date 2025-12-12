@@ -2,7 +2,7 @@
 
 import { cn, handleError } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/headless/Button";
 import {
   Card,
   CardContent,
@@ -10,8 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/headless/Input";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -44,29 +43,31 @@ export function UpdatePasswordForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
+      <Card className="border-none shadow-xl bg-white/80 backdrop-blur-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Reset Your Password</CardTitle>
-          <CardDescription>
-            Enter your new password below
-          </CardDescription>
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-vinta-purple to-vinta-pink bg-clip-text text-transparent">
+            Reset Your Password
+          </CardTitle>
+          <CardDescription>Enter your new password below</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleUpdatePassword}>
             <div className="flex flex-col gap-6">
-              <div className="grid gap-2" suppressHydrationWarning>
-                <Label htmlFor="password">New password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="New password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  suppressHydrationWarning
-                />
-              </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
+              <Input
+                label="New password"
+                id="password"
+                type="password"
+                placeholder="New password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                suppressHydrationWarning
+              />
+
+              {error && (
+                <p className="text-sm text-red-500 font-medium">{error}</p>
+              )}
+
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Saving..." : "Save new password"}
               </Button>

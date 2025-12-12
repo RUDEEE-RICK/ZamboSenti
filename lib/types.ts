@@ -1,11 +1,9 @@
-// Type definitions for Naga City Connect app
-
 export interface Service {
   id: string;
   title: string;
   description: string;
   icon: string;
-  category: 'e-service' | 'popular' | 'featured';
+  category: "e-service" | "popular" | "featured";
   externalUrl?: string;
 }
 
@@ -36,7 +34,7 @@ export interface NewsArticle {
 
 export interface EmergencyContact {
   id: string;
-  type: 'smart' | 'tnt' | 'landline';
+  type: "smart" | "tnt" | "landline";
   number: string;
   label: string;
 }

@@ -34,7 +34,7 @@ export function UserAvatar() {
       asChild
     >
       <Link href="/account" aria-label="Account">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-teal-600 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
           <User className="w-5 h-5 text-white" />
         </div>
       </Link>

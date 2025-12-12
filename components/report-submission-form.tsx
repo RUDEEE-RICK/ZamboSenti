@@ -7,19 +7,19 @@ import { ChevronRight, FileText } from 'lucide-react';
 export function ReportSubmissionForm() {
     return (
         <Link href="/report">
-            <Card className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 border-b border-orange-200">
+            <Card className="overflow-hidden hover:shadow-lg transition-all cursor-pointer border-primary/20 group">
+                <div className="bg-gradient-to-r from-white to-primary/5">
                     <div className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                                <FileText className="w-5 h-5 text-primary" />
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                                <FileText className="w-6 h-6 text-white" />
                             </div>
                             <div className="text-left">
-                                <h3 className="font-semibold text-foreground">Report an Issue</h3>
+                                <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors">Report an Issue</h3>
                                 <p className="text-sm text-muted-foreground">Submit a complaint to address it promptly</p>
                             </div>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                     </div>
                 </div>
             </Card>

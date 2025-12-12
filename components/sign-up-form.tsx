@@ -3,7 +3,7 @@
 import { cn, handleError, buildFullName } from "@/lib/utils";
 import { validateSignUpForm } from "@/lib/validation";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/headless/Button";
 import {
   Card,
   CardContent,
@@ -11,8 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/headless/Input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -71,7 +70,7 @@ export function SignUpForm({
             contact,
             birth_date: birthDate,
             user_roles: "citizen",
-          }
+          },
         },
       });
       if (error) throw error;
@@ -86,68 +85,68 @@ export function SignUpForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
+      <Card className="border-none shadow-xl bg-white/80 backdrop-blur-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Join ZamboSenti</CardTitle>
-          <CardDescription>Create an account to start filing complaints in Zamboanga City</CardDescription>
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-vinta-purple to-vinta-pink bg-clip-text text-transparent">
+            Join ZamSolucion
+          </CardTitle>
+          <CardDescription>
+            Create an account to start filing complaints in Zamboanga City
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
-            <div className="flex flex-col gap-6">
-              <div className="grid grid-cols-3 gap-2" suppressHydrationWarning>
-                <div className="grid gap-2">
-                  <Label htmlFor="fName">First Name</Label>
-                  <Input
-                    id="fName"
-                    type="text"
-                    placeholder="Juan"
-                    required
-                    value={fName}
-                    onChange={(e) => setFName(e.target.value)}
-                    suppressHydrationWarning
-                  />
-                </div>
-                <div className="grid gap-2 justify-center">
-                  <Label htmlFor="mName">Middle Name</Label>
-                  <Input
-                    id="mName"
-                    type="text"
-                    placeholder="D"
-                    required
-                    value={mName}
-                    onChange={(e) => setMName(e.target.value)}
-                    className="w-14 justify-center"
-                    suppressHydrationWarning
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="lName">Last Name</Label>
-                  <Input
-                    id="lName"
-                    type="text"
-                    placeholder="Delacruz"
-                    required
-                    value={lName}
-                    onChange={(e) => setLName(e.target.value)}
-                    suppressHydrationWarning
-                  />
-                </div>
-              </div>
-              <div className="grid gap-2" suppressHydrationWarning>
-                <Label htmlFor="address">Address</Label>
+            <div className="flex flex-col gap-4">
+              <div
+                className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+                suppressHydrationWarning
+              >
                 <Input
-                  id="address"
+                  label="First Name"
+                  id="fName"
                   type="text"
-                  placeholder="123 Main St"
+                  placeholder="Juan"
                   required
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  value={fName}
+                  onChange={(e) => setFName(e.target.value)}
+                  suppressHydrationWarning
+                />
+                <Input
+                  label="M.I."
+                  id="mName"
+                  type="text"
+                  placeholder="D"
+                  required
+                  value={mName}
+                  onChange={(e) => setMName(e.target.value)}
+                  suppressHydrationWarning
+                />
+                <Input
+                  label="Last Name"
+                  id="lName"
+                  type="text"
+                  placeholder="Delacruz"
+                  required
+                  value={lName}
+                  onChange={(e) => setLName(e.target.value)}
                   suppressHydrationWarning
                 />
               </div>
-              <div className="grid gap-2" suppressHydrationWarning>
-                <Label htmlFor="contact">Contact Number</Label>
+
+              <Input
+                label="Address"
+                id="address"
+                type="text"
+                placeholder="123 Main St"
+                required
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                suppressHydrationWarning
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
+                  label="Contact Number"
                   id="contact"
                   type="tel"
                   placeholder="+63 912 345 6789"
@@ -156,11 +155,9 @@ export function SignUpForm({
                   onChange={(e) => setContact(e.target.value)}
                   suppressHydrationWarning
                 />
-              </div>
-              {/* birth date */}
-              <div className="grid gap-2" suppressHydrationWarning>
-                <Label htmlFor="birthDate">Birth Date</Label>
+
                 <Input
+                  label="Birth Date"
                   id="birthDate"
                   type="date"
                   required
@@ -169,23 +166,21 @@ export function SignUpForm({
                   suppressHydrationWarning
                 />
               </div>
-              <div className="grid gap-2" suppressHydrationWarning>
-                <Label htmlFor="email">Email</Label>
+
+              <Input
+                label="Email"
+                id="email"
+                type="email"
+                placeholder="m@example.com"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                suppressHydrationWarning
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  suppressHydrationWarning
-                />
-              </div>
-              <div className="grid gap-2" suppressHydrationWarning>
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                </div>
-                <Input
+                  label="Password"
                   id="password"
                   type="password"
                   required
@@ -193,12 +188,9 @@ export function SignUpForm({
                   onChange={(e) => setPassword(e.target.value)}
                   suppressHydrationWarning
                 />
-              </div>
-              <div className="grid gap-2" suppressHydrationWarning>
-                <div className="flex items-center">
-                  <Label htmlFor="repeat-password">Repeat Password</Label>
-                </div>
+
                 <Input
+                  label="Repeat Password"
                   id="repeat-password"
                   type="password"
                   required
@@ -207,14 +199,25 @@ export function SignUpForm({
                   suppressHydrationWarning
                 />
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Creating an account..." : "Sign up"}
+
+              {error && (
+                <p className="text-sm text-red-500 font-medium">{error}</p>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full mt-2"
+                disabled={isLoading}
+              >
+                {isLoading ? "Creating Account..." : "Sign Up"}
               </Button>
             </div>
-            <div className="mt-4 text-center text-sm">
+            <div className="mt-6 text-center text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/auth/login" className="underline underline-offset-4">
+              <Link
+                href="/auth/login"
+                className="font-bold text-vinta-purple hover:underline"
+              >
                 Login
               </Link>
             </div>

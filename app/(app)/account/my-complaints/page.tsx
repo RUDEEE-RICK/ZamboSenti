@@ -6,8 +6,9 @@ import { AppHeader } from '@/components/app-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, FileText, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, AlertCircle, MapPin, Calendar, ChevronRight, Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { AnimatedBackground } from '@/components/animated-background';
 
 interface Complaint {
     id: string;
@@ -19,11 +20,11 @@ interface Complaint {
     location: string;
 }
 
-const STATUS_BADGE_COLORS: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    processing: 'bg-blue-100 text-blue-800 border-blue-300',
-    solved: 'bg-green-100 text-green-800 border-green-300',
-    rejected: 'bg-red-100 text-red-800 border-red-300',
+const STATUS_STYLES: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    processing: 'bg-blue-100 text-blue-800 border-blue-200',
+    solved: 'bg-green-100 text-green-800 border-green-200',
+    rejected: 'bg-red-100 text-red-800 border-red-200',
 };
 
 export default function MyComplaintsPage() {
@@ -69,12 +70,13 @@ export default function MyComplaintsPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-background">
+            <div className="min-h-screen bg-background relative overflow-hidden">
+                <AnimatedBackground />
                 <AppHeader title="My Complaints" showNotifications={false} />
-                <div className="max-w-screen-xl mx-auto px-4 py-6 flex items-center justify-center min-h-[50vh]">
-                    <div className="flex items-center gap-3">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                        <p className="text-lg">Loading your complaints...</p>
+                <div className="max-w-screen-xl mx-auto px-4 py-6 flex items-center justify-center min-h-[50vh] relative z-10">
+                    <div className="flex flex-col items-center gap-3 bg-white/80 backdrop-blur-md p-8 rounded-2xl shadow-lg border border-white/50">
+                        <Loader2 className="w-8 h-8 animate-spin text-vinta-purple" />
+                        <p className="text-lg font-medium text-vinta-purple-dark">Loading your complaints...</p>
                     </div>
                 </div>
             </div>
@@ -82,98 +84,101 @@ export default function MyComplaintsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+        <div className="min-h-screen bg-background relative overflow-hidden">
+            <AnimatedBackground />
             <AppHeader title="My Complaints" showNotifications={false} />
 
-            <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+            <div className="max-w-7xl mx-auto px-4 py-8 relative z-10 space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <button
                             onClick={() => router.push('/account')}
-                            className="mb-2 text-sm text-muted-foreground hover:text-primary font-medium flex items-center gap-2 transition-colors"
+                            className="group mb-2 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-vinta-purple transition-colors bg-white/50 backdrop-blur-sm px-4 py-2 rounded-full border border-white/50 shadow-sm hover:shadow-md"
                         >
-                            <ArrowLeft className="w-4 h-4" /> Back to Account
+                            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" /> 
+                            Back to Account
                         </button>
-                        <h1 className="text-3xl font-bold text-foreground">My Complaints</h1>
+                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-vinta-purple-dark to-vinta-pink-dark">
+                            My Complaints
+                        </h1>
                         <p className="text-muted-foreground mt-1">Track the status of your submitted complaints</p>
                     </div>
+                    <Button 
+                        onClick={() => router.push('/report')}
+                        className="bg-gradient-to-r from-vinta-purple to-vinta-pink hover:from-vinta-purple-dark hover:to-vinta-pink-dark text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                    >
+                        <Plus className="w-4 h-4 mr-2" />
+                        New Complaint
+                    </Button>
                 </div>
 
                 {error && (
-                    <Card className="border-red-200 bg-red-50">
+                    <Card className="border-red-200 bg-red-50/90 backdrop-blur-sm shadow-sm animate-in slide-in-from-top-2">
                         <div className="p-4 flex items-start gap-3">
                             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                             <div className="flex-1">
                                 <h4 className="font-semibold text-red-900">Error</h4>
                                 <p className="text-sm text-red-700 mt-1">{error}</p>
                             </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setError(null)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-100"
-                            >
-                                Dismiss
-                            </Button>
                         </div>
                     </Card>
                 )}
 
                 {complaints.length === 0 ? (
-                    <Card className="p-12">
-                        <div className="text-center">
-                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-secondary flex items-center justify-center">
-                                <FileText className="w-8 h-8 text-muted-foreground" />
-                            </div>
-                            <h3 className="text-lg font-semibold mb-2">No complaints yet</h3>
-                            <p className="text-muted-foreground text-sm mb-4">
-                                You haven&apos;t submitted any complaints yet. Start by reporting an issue.
-                            </p>
-                            <Button onClick={() => router.push('/report')}>
-                                Submit a Complaint
-                            </Button>
+                    <Card className="p-12 text-center bg-white/70 backdrop-blur-md border-white/50 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="w-20 h-20 bg-vinta-purple/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <FileText className="w-10 h-10 text-vinta-purple" />
                         </div>
+                        <h3 className="text-xl font-semibold mb-2 text-foreground">No complaints found</h3>
+                        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                            You haven&apos;t submitted any complaints yet. If you notice an issue in your community, please report it.
+                        </p>
+                        <Button 
+                            onClick={() => router.push('/report')}
+                            className="bg-gradient-to-r from-vinta-purple to-vinta-pink text-white shadow-lg hover:shadow-xl transition-all"
+                        >
+                            Submit a Report
+                        </Button>
                     </Card>
                 ) : (
-                    <div className="grid gap-3">
-                        {complaints.map((complaint) => (
-                            <Card
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {complaints.map((complaint, index) => (
+                            <Card 
                                 key={complaint.id}
-                                className="p-4 hover:bg-secondary/50 transition-all cursor-pointer border"
+                                className="group relative overflow-hidden bg-white/70 backdrop-blur-md border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4"
+                                style={{ animationDelay: `${index * 100}ms` }}
                                 onClick={() => router.push(`/account/my-complaints/${complaint.id}`)}
                             >
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-base text-foreground mb-1 truncate">
-                                            {complaint.title}
-                                        </h3>
-                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <span>{new Date(complaint.created_at).toLocaleDateString('en-US', {
-                                                month: 'short',
-                                                day: 'numeric',
-                                            })}</span>
-                                            <span>•</span>
-                                            <span>{new Date(complaint.created_at).toLocaleTimeString('en-US', {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                            })}</span>
+                                <div className="absolute inset-0 bg-gradient-to-br from-vinta-purple/5 to-vinta-pink/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                
+                                <div className="p-6 relative z-10">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <Badge className={`${STATUS_STYLES[complaint.status] || 'bg-gray-100 text-gray-800'} border px-2.5 py-0.5 rounded-full font-medium capitalize shadow-sm`}>
+                                            {complaint.status}
+                                        </Badge>
+                                        <span className="text-xs text-muted-foreground flex items-center gap-1 bg-white/50 px-2 py-1 rounded-full">
+                                            <Calendar className="w-3 h-3" />
+                                            {new Date(complaint.created_at).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    
+                                    <h3 className="font-bold text-lg mb-2 line-clamp-1 group-hover:text-vinta-purple transition-colors">
+                                        {complaint.title}
+                                    </h3>
+                                    
+                                    <div className="space-y-2 text-sm text-muted-foreground mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <MapPin className="w-4 h-4 text-vinta-purple/70" />
+                                            <span className="line-clamp-1">{complaint.location}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <FileText className="w-4 h-4 text-vinta-purple/70" />
+                                            <span className="capitalize">{complaint.category}</span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <Badge className={`${STATUS_BADGE_COLORS[complaint.status]} border font-medium text-xs px-2 py-1`}>
-                                            {complaint.status.charAt(0).toUpperCase() + complaint.status.slice(1)}
-                                        </Badge>
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="text-xs px-2 h-7"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                router.push(`/account/my-complaints/${complaint.id}`);
-                                            }}
-                                        >
-                                            Edit
-                                        </Button>
+
+                                    <div className="flex items-center text-sm font-medium text-vinta-purple opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
+                                        View Details <ChevronRight className="w-4 h-4 ml-1" />
                                     </div>
                                 </div>
                             </Card>

@@ -23,6 +23,16 @@ const safetyProcedures = [
 
 export default function EmergencyPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSafetyProcedures = safetyProcedures.filter(proc => 
+    proc.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredContacts = emergencyContacts.filter(contact => 
+    contact.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    contact.number.includes(searchQuery)
+  );
 
   const handleCopyNumber = (number: string) => {
     navigator.clipboard.writeText(number);
@@ -34,125 +44,144 @@ export default function EmergencyPage() {
   };
 
   const nextImage = () => {
-    setCurrentImageIndex((prev) => (prev + 1) % safetyProcedures.length);
+    if (filteredSafetyProcedures.length === 0) return;
+    setCurrentImageIndex((prev) => (prev + 1) % filteredSafetyProcedures.length);
   };
 
   const prevImage = () => {
-    setCurrentImageIndex((prev) => (prev - 1 + safetyProcedures.length) % safetyProcedures.length);
+    if (filteredSafetyProcedures.length === 0) return;
+    setCurrentImageIndex((prev) => (prev - 1 + filteredSafetyProcedures.length) % filteredSafetyProcedures.length);
   };
 
+  // Reset index when search changes
+  if (currentImageIndex >= filteredSafetyProcedures.length && filteredSafetyProcedures.length > 0) {
+    setCurrentImageIndex(0);
+  }
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <AppHeader title="Emergency" />
 
       {/* Search Bar */}
       <div className="px-4 py-4">
         <div className="relative max-w-screen-xl mx-auto">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-vinta-purple w-5 h-5" />
           <Input
             type="search"
-            placeholder="Search..."
-            className="pl-10 bg-secondary border-border"
+            placeholder="Search safety procedures or hotlines..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentImageIndex(0);
+            }}
+            className="pl-10 bg-vinta-purple/10 border-vinta-purple/20 text-foreground placeholder:text-vinta-purple/50 focus:bg-white focus:border-vinta-purple transition-all rounded-xl h-12"
           />
         </div>
       </div>
 
-      <div className="max-w-screen-xl mx-auto px-4 pb-6 space-y-6">
-
-        {/* Safety Procedures Gallery */}
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-sm text-blue-900 dark:text-blue-100 uppercase tracking-wide">Safety Procedures</h3>
-            <div className="flex gap-2">
-              <button
-                onClick={prevImage}
-                className="w-8 h-8 flex items-center justify-center bg-white dark:bg-gray-800 rounded shadow-sm hover:shadow-md transition-shadow"
-                aria-label="Previous image"
-              >
-                <ChevronLeft className="w-4 h-4 text-gray-700 dark:text-gray-300" />
-              </button>
-              <button
-                onClick={nextImage}
-                className="w-8 h-8 flex items-center justify-center bg-white dark:bg-gray-800 rounded shadow-sm hover:shadow-md transition-shadow"
-                aria-label="Next image"
-              >
-                <ChevronRight className="w-4 h-4 text-gray-700 dark:text-gray-300" />
-              </button>
-            </div>
-          </div>
-
-          <div className="relative bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md">
-            <div className="relative w-full aspect-video bg-gray-100 dark:bg-gray-900">
-              <Image
-                src={safetyProcedures[currentImageIndex].url}
-                alt={safetyProcedures[currentImageIndex].title}
-                width={1920}
-                height={1080}
-                className="w-full h-full object-cover"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 75vw, 1920px"
-                loading='lazy'
-              />
-
-            </div>
-          </div>
-
-          <div className="flex justify-center gap-1.5 mt-3">
-            {safetyProcedures.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentImageIndex(index)}
-                className={`h-1.5 rounded-full transition-all ${index === currentImageIndex
-                  ? 'bg-blue-600 dark:bg-blue-400 w-6'
-                  : 'bg-blue-300 dark:bg-blue-700 w-1.5'
-                  }`}
-                aria-label={`Go to image ${index + 1}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* COMCEN Hotlines */}
-        <Card className="p-6">
-          <h3 className="font-semibold text-lg mb-2">COMCEN Hotlines</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            The Central Communications Center is also available for emergency assistance and other urgent concerns.
-          </p>
-
-          <div className="space-y-3">
-            {emergencyContacts.map((contact) => (
-              <div
-                key={contact.id}
-                className="flex items-center justify-between p-3 bg-secondary rounded-lg"
-              >
-                <div>
-                  <span className="text-sm font-medium text-muted-foreground">{contact.label}: </span>
-                  <span className="text-base font-semibold">{contact.number}</span>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="rounded-full h-10 w-10 hover:bg-primary/10"
-                    onClick={() => handleCallNumber(contact.number)}
-                    aria-label={`Call ${contact.number}`}
-                  >
-                    <Phone className="w-5 h-5 text-primary" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="rounded-full h-10 w-10"
-                    onClick={() => handleCopyNumber(contact.number)}
-                    aria-label={`Copy ${contact.number}`}
-                  >
-                    <Copy className="w-5 h-5" />
-                  </Button>
-                </div>
+      <div className="max-w-screen-xl mx-auto px-4 space-y-6">
+        {/* Safety Procedures Carousel */}
+        {filteredSafetyProcedures.length > 0 && (
+          <Card className="p-4 bg-blue-50/50 border-blue-100 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-vinta-purple uppercase tracking-wide text-sm">Safety Procedures</h3>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-8 w-8 rounded-lg bg-white" 
+                  onClick={prevImage}
+                  disabled={filteredSafetyProcedures.length <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-8 w-8 rounded-lg bg-white" 
+                  onClick={nextImage}
+                  disabled={filteredSafetyProcedures.length <= 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
-            ))}
-          </div>
-        </Card>
+            </div>
+            
+            <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-white shadow-inner border border-gray-100">
+              <Image
+                src={filteredSafetyProcedures[currentImageIndex].url}
+                alt={filteredSafetyProcedures[currentImageIndex].title}
+                fill
+                className="object-contain"
+              />
+            </div>
+            <div className="flex justify-center gap-1.5 mt-4 flex-wrap">
+              {filteredSafetyProcedures.map((_, idx) => (
+                <div 
+                  key={idx} 
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    idx === currentImageIndex ? 'w-6 bg-vinta-purple' : 'w-1.5 bg-vinta-purple/20'
+                  }`} 
+                />
+              ))}
+            </div>
+            <div className="text-center mt-2 font-medium text-vinta-purple">
+              {filteredSafetyProcedures[currentImageIndex].title}
+            </div>
+          </Card>
+        )}
 
+        {/* Hotlines */}
+        {filteredContacts.length > 0 && (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-foreground">COMCEN Hotlines</h3>
+              <p className="text-sm text-muted-foreground">
+                The Central Communications Center is also available for emergency assistance and other urgent concerns.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {filteredContacts.map((contact, index) => (
+                <Card 
+                  key={index} 
+                  className="overflow-hidden border-none shadow-md hover:shadow-lg transition-all duration-300 group"
+                >
+                  <div className="bg-gradient-to-r from-vinta-purple to-vinta-pink p-4 flex items-center justify-between text-white">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium opacity-90">{contact.label}</span>
+                      <span className="text-xl font-bold tracking-wide">{contact.number}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white"
+                        onClick={() => handleCallNumber(contact.number)}
+                      >
+                        <Phone className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white"
+                        onClick={() => handleCopyNumber(contact.number)}
+                      >
+                        <Copy className="h-5 w-5" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {filteredSafetyProcedures.length === 0 && filteredContacts.length === 0 && (
+           <div className="text-center py-10 text-muted-foreground">
+             No results found for "{searchQuery}"
+           </div>
+        )}
       </div>
     </div>
   );
