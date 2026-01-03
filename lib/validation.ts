@@ -7,7 +7,8 @@ export function validateSignUpForm(data: {
   firstName: string;
   middleName?: string;
   lastName: string;
-  address: string;
+  address?: string;
+  barangay: string;
   contact: string;
   birthDate: string;
   password: string;
@@ -18,6 +19,7 @@ export function validateSignUpForm(data: {
     middleName,
     lastName,
     address,
+    barangay,
     contact,
     birthDate,
     password,
@@ -48,10 +50,18 @@ export function validateSignUpForm(data: {
     };
   }
 
-  if (!address.trim() || address.length < 5) {
+  // Address is now optional
+  if (address && address.trim().length > 0 && address.trim().length < 5) {
     return {
       valid: false,
-      error: "Please enter a valid address (at least 5 characters)",
+      error: "Address must be at least 5 characters if provided",
+    };
+  }
+
+  if (!barangay.trim()) {
+    return {
+      valid: false,
+      error: "Please select your barangay",
     };
   }
 

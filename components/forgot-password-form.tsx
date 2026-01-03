@@ -48,7 +48,7 @@ export function ForgotPasswordForm({
       {success ? (
         <Card className="border-none shadow-xl bg-white/80 backdrop-blur-md">
           <CardHeader>
-            <CardTitle className="text-2xl font-bold text-vinta-green">
+            <CardTitle className="text-2xl font-bold text-emerald-600">
               Check Your Email
             </CardTitle>
             <CardDescription>
@@ -65,7 +65,7 @@ export function ForgotPasswordForm({
       ) : (
         <Card className="border-none shadow-xl bg-white/80 backdrop-blur-md">
           <CardHeader>
-            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-vinta-purple to-vinta-pink bg-clip-text text-transparent">
+            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
               Reset Your Password
             </CardTitle>
             <CardDescription>
@@ -98,7 +98,7 @@ export function ForgotPasswordForm({
                 Already have an account?{" "}
                 <Link
                   href="/auth/login"
-                  className="font-bold text-vinta-purple hover:underline"
+                  className="font-bold text-primary hover:underline"
                 >
                   Login
                 </Link>

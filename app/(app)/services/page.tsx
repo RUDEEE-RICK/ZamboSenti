@@ -21,8 +21,8 @@ export default function ServicesPage() {
       <AppHeader title="Services" />
 
       {/* Search Bar */}
-      <div className="px-4 py-4">
-        <div className="max-w-screen-xl mx-auto">
+      <div className="px-4 sm:px-6 py-4">
+        <div className="max-w-6xl mx-auto">
           <Input
             type="search"
             placeholder="Search..."
@@ -34,7 +34,7 @@ export default function ServicesPage() {
         </div>
       </div>
 
-      <div className="max-w-screen-xl mx-auto px-4 pb-6 space-y-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-6 space-y-8">
         {/* e-Services */}
         <section>
           <h3 className="text-lg font-semibold mb-2">e-Services</h3>

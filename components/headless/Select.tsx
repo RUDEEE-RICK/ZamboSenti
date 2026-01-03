@@ -24,7 +24,7 @@ export interface SelectOption {
 }
 
 interface SelectProps<T extends SelectOption> {
-  label?: string;
+  label?: React.ReactNode;
   description?: string;
   error?: string;
   value: T | null;
@@ -58,7 +58,7 @@ export function Select<T extends SelectOption>({
           <ListboxButton
             className={cn(
               "relative w-full cursor-pointer rounded-xl border-2 border-gray-200 bg-white/50 py-2.5 pl-4 pr-10 text-left text-sm",
-              "focus:border-vinta-purple focus:outline-none focus:ring-4 focus:ring-vinta-purple/10",
+              "focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10",
               "transition-all duration-200",
               error && "border-red-500 focus:ring-red-100"
             )}
@@ -86,9 +86,7 @@ export function Select<T extends SelectOption>({
                   className={({ focus }) =>
                     cn(
                       "relative cursor-pointer select-none py-2.5 pl-10 pr-4",
-                      focus
-                        ? "bg-vinta-purple/10 text-vinta-purple"
-                        : "text-gray-900"
+                      focus ? "bg-primary/10 text-primary" : "text-gray-900"
                     )
                   }
                   value={option}
@@ -104,7 +102,7 @@ export function Select<T extends SelectOption>({
                         {displayValue(option)}
                       </span>
                       {selected ? (
-                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-vinta-purple">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-primary">
                           <Check className="h-4 w-4" aria-hidden="true" />
                         </span>
                       ) : null}

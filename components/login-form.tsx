@@ -59,7 +59,7 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="border-none shadow-xl bg-white/80 backdrop-blur-md">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-vinta-purple to-vinta-pink bg-clip-text text-transparent">
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
             Welcome to ZamSolucion
           </CardTitle>
           <CardDescription>
@@ -93,7 +93,7 @@ export function LoginForm({
                 <div className="flex justify-end">
                   <Link
                     href="/auth/forgot-password"
-                    className="text-xs font-medium text-vinta-purple hover:text-vinta-pink transition-colors"
+                    className="text-xs font-medium text-primary hover:text-primary/70 transition-colors"
                   >
                     Forgot your password?
                   </Link>
@@ -112,7 +112,7 @@ export function LoginForm({
               Don't have an account?{" "}
               <Link
                 href="/auth/sign-up"
-                className="font-bold text-vinta-purple hover:underline"
+                className="font-bold text-primary hover:underline"
               >
                 Sign up
               </Link>

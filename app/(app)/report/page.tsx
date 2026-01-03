@@ -7,6 +7,7 @@ import { Input } from "@/components/headless/Input";
 import { Textarea } from "@/components/headless/Textarea";
 import { Select, type SelectOption } from "@/components/headless/Select";
 import { Stepper } from "@/components/headless/Stepper";
+import { BARANGAYS } from "@/lib/data/barangays";
 import {
   X,
   Camera,
@@ -14,20 +15,75 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
-  Home,
+  MapPin,
+  FileText,
+  Image as ImageIcon,
+  Send,
+  Construction,
+  Lightbulb,
+  Trash2,
+  Droplets,
+  ShieldAlert,
+  Volume2,
+  HelpCircle,
+  UserX,
+  LayoutGrid,
 } from "lucide-react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 
-const CATEGORIES: SelectOption[] = [
-  { id: "Road and Infrastructure", name: "Road and Infrastructure" },
-  { id: "Street Lighting", name: "Street Lighting" },
-  { id: "Waste Management", name: "Waste Management" },
-  { id: "Water and Drainage", name: "Water and Drainage" },
-  { id: "Public Safety", name: "Public Safety" },
-  { id: "Noise Complaint", name: "Noise Complaint" },
-  { id: "Other", name: "Other" },
+// Category type with icon component
+interface CategoryOption {
+  id: string;
+  name: string;
+  icon: React.ElementType;
+  description: string;
+}
+
+const CATEGORIES: CategoryOption[] = [
+  {
+    id: "Road and Infrastructure",
+    name: "Road and Infrastructure",
+    icon: Construction,
+    description: "Potholes, damaged roads, bridges",
+  },
+  {
+    id: "Street Lighting",
+    name: "Street Lighting",
+    icon: Lightbulb,
+    description: "Broken or missing street lights",
+  },
+  {
+    id: "Waste Management",
+    name: "Waste Management",
+    icon: Trash2,
+    description: "Garbage collection, illegal dumping",
+  },
+  {
+    id: "Water and Drainage",
+    name: "Water and Drainage",
+    icon: Droplets,
+    description: "Flooding, clogged drains, water supply",
+  },
+  {
+    id: "Public Safety",
+    name: "Public Safety",
+    icon: ShieldAlert,
+    description: "Safety hazards, security concerns",
+  },
+  {
+    id: "Noise Complaint",
+    name: "Noise Complaint",
+    icon: Volume2,
+    description: "Excessive noise disturbances",
+  },
+  {
+    id: "Other",
+    name: "Other",
+    icon: HelpCircle,
+    description: "Other issues not listed above",
+  },
 ];
 
 export default function ReportPage() {
@@ -35,27 +91,32 @@ export default function ReportPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Form State
   const [formData, setFormData] = useState({
-    category: null as SelectOption | null,
+    category: null as CategoryOption | null,
+    barangay: null as SelectOption | null,
+    useDefaultBarangay: true,
     location: "",
     title: "",
     description: "",
     contactNumber: "",
     imageFile: null as File | null,
     imagePreview: null as string | null,
+    isAnonymous: false,
   });
+  const [userDefaultBarangay, setUserDefaultBarangay] =
+    useState<SelectOption | null>(null);
 
   const steps = [
     {
       id: "01",
-      name: "Category & Location",
+      name: "Issue Type",
       status:
         currentStep === 0
           ? "current"
@@ -65,7 +126,7 @@ export default function ReportPage() {
     },
     {
       id: "02",
-      name: "Details",
+      name: "Location",
       status:
         currentStep === 1
           ? "current"
@@ -75,7 +136,7 @@ export default function ReportPage() {
     },
     {
       id: "03",
-      name: "Evidence",
+      name: "Details",
       status:
         currentStep === 2
           ? "current"
@@ -85,11 +146,21 @@ export default function ReportPage() {
     },
     {
       id: "04",
-      name: "Review",
+      name: "Evidence",
       status:
         currentStep === 3
           ? "current"
           : currentStep > 3
+          ? "complete"
+          : "upcoming",
+    },
+    {
+      id: "05",
+      name: "Review",
+      status:
+        currentStep === 4
+          ? "current"
+          : currentStep > 4
           ? "complete"
           : "upcoming",
     },
@@ -101,7 +172,39 @@ export default function ReportPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      setUserId(user?.id || null);
+
+      if (!user) {
+        router.push("/auth/login");
+        return;
+      }
+
+      setUserId(user.id);
+
+      // Fetch user's profile to check admin status and default barangay
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("barangay, user_roles")
+        .eq("id", user.id)
+        .single();
+
+      const userIsAdmin = profile?.user_roles === "admin";
+      setIsAdmin(userIsAdmin);
+
+      // Redirect admins away from this page
+      if (userIsAdmin) {
+        router.push("/");
+        return;
+      }
+
+      if (profile?.barangay) {
+        const defaultBarangay = BARANGAYS.find(
+          (b) => b.name === profile.barangay
+        );
+        if (defaultBarangay) {
+          setUserDefaultBarangay(defaultBarangay);
+          setFormData((prev) => ({ ...prev, barangay: defaultBarangay }));
+        }
+      }
     };
     getUser();
   }, []);
@@ -140,23 +243,28 @@ export default function ReportPage() {
   const validateStep = (step: number): boolean => {
     const errors: Record<string, string> = {};
 
+    // Step 0: Issue Type (category selection)
     if (step === 0) {
-      if (!formData.category) errors.category = "Please select a category";
-      if (!formData.location.trim()) errors.location = "Location is required";
+      if (!formData.category) errors.category = "Please select an issue type";
     }
 
+    // Step 1: Location
     if (step === 1) {
-      if (!formData.title.trim()) errors.title = "Title is required";
-      else if (formData.title.length < 5)
-        errors.title = "Title must be at least 5 characters";
-
-      if (!formData.description.trim())
-        errors.description = "Description is required";
-      else if (formData.description.length < 20)
-        errors.description = "Description must be at least 20 characters";
+      if (!formData.barangay) errors.barangay = "Please select a barangay";
+      // Specific location is optional
     }
 
-    if (step === 3) {
+    // Step 2: Details
+    if (step === 2) {
+      if (!formData.title.trim()) errors.title = "Please tell us what's wrong";
+      if (!formData.description.trim())
+        errors.description = "Please describe the issue";
+    }
+
+    // Step 3: Evidence (optional, no validation needed)
+
+    // Step 4: Review
+    if (step === 4) {
       if (
         formData.contactNumber &&
         !/^(\+639|09)\d{9}$/.test(formData.contactNumber.replace(/\s/g, ""))
@@ -212,60 +320,65 @@ export default function ReportPage() {
 
       let imagePath = null;
       if (formData.imageFile) {
+        console.log("📸 Starting image upload...");
         const fileExt = formData.imageFile.name.split(".").pop();
         const fileName = `${Date.now()}-${Math.random()
           .toString(36)
           .substring(7)}.${fileExt}`;
         const filePath = `reports/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
+        console.log("📤 Uploading to storage:", { bucket: "report-image", path: filePath });
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from("report-image")
           .upload(filePath, formData.imageFile);
-        if (uploadError)
-          throw new Error(`Image upload failed: ${uploadError.message}`);
+        
+        if (uploadError) {
+          console.error("❌ STORAGE UPLOAD ERROR:", {
+            message: uploadError.message,
+            error: uploadError,
+          });
+          throw new Error(`Storage upload failed: ${uploadError.message}`);
+        }
+
+        console.log("✅ Storage upload successful:", uploadData);
 
         const {
           data: { publicUrl },
         } = supabase.storage.from("report-image").getPublicUrl(filePath);
         imagePath = publicUrl;
+        console.log("🔗 Public URL generated:", imagePath);
       }
 
+      console.log("📝 Inserting complaint into database...");
+      
       const { data: complaintData, error: insertError } = await supabase
         .from("complaints")
         .insert({
           title: formData.title.trim(),
           category: formData.category?.name,
+          barangay: formData.barangay?.name,
           location: formData.location.trim(),
           content: formData.description.trim(),
           user_id: currentUser.id,
           status: "pending",
+          is_anonymous: formData.isAnonymous,
+          image_url: imagePath, // Store image URL directly in complaints
         })
         .select()
         .single();
 
-      if (insertError)
-        throw new Error(`Failed to submit: ${insertError.message}`);
-
-      if (imagePath && complaintData) {
-        const { data: pictureData, error: pictureError } = await supabase
-          .from("pictures")
-          .insert({
-            image_path: imagePath,
-            parent_type: "complaint",
-            parent_id: complaintData.id,
-          })
-          .select()
-          .single();
-
-        if (!pictureError && pictureData) {
-          await supabase
-            .from("complaint_pictures")
-            .insert({
-              complaint_id: complaintData.id,
-              picture_id: pictureData.id,
-            });
-        }
+      if (insertError) {
+        console.error("❌ COMPLAINT INSERT ERROR:", {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code,
+        });
+        throw new Error(`Failed to submit complaint: ${insertError.message}`);
       }
+
+      console.log("✅ Complaint created successfully:", complaintData);
 
       setSuccess(true);
       setTimeout(() => router.push("/"), 2000);
@@ -279,64 +392,171 @@ export default function ReportPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col items-center justify-center p-4">
-      {/* Header/Nav */}
-      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 w-full max-w-7xl mx-auto">
-        <Button
-          variant="ghost"
-          className="gap-2"
-          onClick={() => router.push("/")}
-        >
-          <Home className="w-5 h-5" />
-          <span className="hidden sm:inline">Back to Home</span>
-        </Button>
+  // Show loading while checking authentication
+  if (isAdmin === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex items-center justify-center px-4 sm:px-6">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
       </div>
+    );
+  }
 
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex flex-col items-center justify-center px-4 sm:px-6 py-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-2xl mt-16 sm:mt-0"
+        className="w-full max-w-2xl"
       >
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl overflow-hidden border border-white/50">
-          <div className="p-4 sm:p-8">
-            <div className="mb-6 sm:mb-8 text-center sm:text-left">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-vinta-purple to-vinta-pink bg-clip-text text-transparent mb-2">
-                New Report
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100/50">
+          {/* Progress Header */}
+          <div className="bg-gradient-to-r from-primary to-primary/80 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl sm:text-2xl font-bold text-white">
+                Report an Issue
               </h1>
-              <p className="text-gray-500 text-sm">
-                Help us improve Zamboanga City by reporting issues.
-              </p>
+              <span className="text-white/80 text-sm font-medium">
+                Step {currentStep + 1} of {steps.length}
+              </span>
             </div>
-
-            <div className="mb-8 overflow-x-auto pb-2">
-              {/* Mobile View: Simplified Stepper could go here if needed, but horizontal works okay on mobile usually */}
-              <Stepper steps={steps as any} />
+            {/* Step Progress Bar */}
+            <div className="flex gap-2">
+              {steps.map((step, index) => (
+                <div
+                  key={step.id}
+                  className={`h-2 flex-1 rounded-full transition-all duration-300 ${
+                    index < currentStep
+                      ? "bg-white"
+                      : index === currentStep
+                      ? "bg-white/80"
+                      : "bg-white/30"
+                  }`}
+                />
+              ))}
             </div>
+            <div className="flex justify-between mt-2">
+              {steps.map((step, index) => (
+                <span
+                  key={step.id}
+                  className={`text-xs font-medium transition-all ${
+                    index <= currentStep ? "text-white" : "text-white/50"
+                  }`}
+                >
+                  {step.name}
+                </span>
+              ))}
+            </div>
+          </div>
 
+          <div className="p-4 sm:p-8">
             {error && (
-              <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-100 flex gap-3 text-red-700 animate-in fade-in slide-in-from-top-2">
+              <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-100 flex gap-3 text-rose-700">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
                 <p className="text-sm font-medium">{error}</p>
               </div>
             )}
 
             {success ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center animate-in zoom-in-50 duration-500">
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6 text-green-600">
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 text-emerald-600">
                   <CheckCircle className="w-10 h-10" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <h2 className="text-2xl font-bold text-foreground mb-2">
                   Report Submitted!
                 </h2>
-                <p className="text-gray-500">
+                <p className="text-muted-foreground">
                   Thank you for your contribution. Redirecting you home...
                 </p>
               </div>
             ) : (
               <div className="relative min-h-[300px]">
                 <AnimatePresence mode="wait">
+                  {/* Step 0: Issue Type Selection */}
                   {currentStep === 0 && (
+                    <motion.div
+                      key="step0"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}
+                      className="space-y-6"
+                    >
+                      {/* Step Header */}
+                      <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <LayoutGrid className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <h2 className="font-semibold text-gray-900">
+                            What type of issue?
+                          </h2>
+                          <p className="text-sm text-gray-500">
+                            Select the category that best describes the problem
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Category Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {CATEGORIES.map((category) => {
+                          const IconComponent = category.icon;
+                          const isSelected =
+                            formData.category?.id === category.id;
+                          return (
+                            <button
+                              key={category.id}
+                              type="button"
+                              onClick={() =>
+                                setFormData((prev) => ({ ...prev, category }))
+                              }
+                              className={`relative p-4 rounded-xl border-2 transition-all duration-200 text-left group hover:shadow-md ${
+                                isSelected
+                                  ? "border-primary bg-primary/5 shadow-md"
+                                  : "border-gray-200 bg-white hover:border-primary/50 hover:bg-gray-50"
+                              }`}
+                            >
+                              <div
+                                className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 transition-colors ${
+                                  isSelected
+                                    ? "bg-primary text-white"
+                                    : "bg-gray-100 text-gray-600 group-hover:bg-primary/10 group-hover:text-primary"
+                                }`}
+                              >
+                                <IconComponent className="w-5 h-5" />
+                              </div>
+                              <h3
+                                className={`font-medium text-sm mb-1 ${
+                                  isSelected ? "text-primary" : "text-gray-900"
+                                }`}
+                              >
+                                {category.name}
+                              </h3>
+                              <p className="text-xs text-gray-500 line-clamp-2">
+                                {category.description}
+                              </p>
+                              {isSelected && (
+                                <div className="absolute top-2 right-2">
+                                  <CheckCircle className="w-5 h-5 text-primary" />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {validationErrors.category && (
+                        <p className="text-sm text-rose-500 flex items-center gap-1">
+                          <AlertCircle className="w-4 h-4" />
+                          {validationErrors.category}
+                        </p>
+                      )}
+                    </motion.div>
+                  )}
+
+                  {/* Step 1: Location */}
+                  {currentStep === 1 && (
                     <motion.div
                       key="step1"
                       initial={{ opacity: 0, x: 20 }}
@@ -345,18 +565,73 @@ export default function ReportPage() {
                       transition={{ duration: 0.2 }}
                       className="space-y-6"
                     >
-                      <Select
-                        label="What type of issue is this?"
-                        description="Select the category that best fits the problem."
-                        options={CATEGORIES}
-                        value={formData.category}
-                        onChange={(val) =>
-                          setFormData((prev) => ({ ...prev, category: val }))
-                        }
-                        error={validationErrors.category}
-                      />
+                      {/* Step Header */}
+                      <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <MapPin className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <h2 className="font-semibold text-gray-900">
+                            Where is the issue?
+                          </h2>
+                          <p className="text-sm text-gray-500">
+                            Help us locate the problem
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Barangay Selection */}
+                      <div className="space-y-3">
+                        {userDefaultBarangay && (
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.useDefaultBarangay}
+                              onChange={(e) => {
+                                const useDefault = e.target.checked;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  useDefaultBarangay: useDefault,
+                                  barangay: useDefault
+                                    ? userDefaultBarangay
+                                    : prev.barangay,
+                                }));
+                              }}
+                              className="rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-foreground">
+                              Use my default barangay (
+                              {userDefaultBarangay.name})
+                            </span>
+                          </label>
+                        )}
+
+                        {(!formData.useDefaultBarangay ||
+                          !userDefaultBarangay) && (
+                          <Select
+                            label={
+                              <>
+                                Barangay where the issue is located{" "}
+                                <span className="text-rose-500">*</span>
+                              </>
+                            }
+                            description="Select the barangay where you want to file the complaint."
+                            options={BARANGAYS}
+                            value={formData.barangay}
+                            onChange={(val) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                barangay: val,
+                              }))
+                            }
+                            error={validationErrors.barangay}
+                          />
+                        )}
+                      </div>
+
                       <Input
-                        label="Where is it located?"
+                        label="Specific Location (Optional)"
+                        description="Help us find the exact spot"
                         placeholder="e.g., Corner of Rizal St. and Tetuan Highway"
                         value={formData.location}
                         onChange={(e) =>
@@ -365,12 +640,12 @@ export default function ReportPage() {
                             location: e.target.value,
                           }))
                         }
-                        error={validationErrors.location}
                       />
                     </motion.div>
                   )}
 
-                  {currentStep === 1 && (
+                  {/* Step 2: Details */}
+                  {currentStep === 2 && (
                     <motion.div
                       key="step2"
                       initial={{ opacity: 0, x: 20 }}
@@ -379,9 +654,29 @@ export default function ReportPage() {
                       transition={{ duration: 0.2 }}
                       className="space-y-6"
                     >
+                      {/* Step Header */}
+                      <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <h2 className="font-semibold text-gray-900">
+                            Issue Details
+                          </h2>
+                          <p className="text-sm text-gray-500">
+                            Tell us more about the problem
+                          </p>
+                        </div>
+                      </div>
+
                       <Input
-                        label="Issue Title"
-                        placeholder="Brief summary of the issue"
+                        label={
+                          <>
+                            What's the issue?{" "}
+                            <span className="text-rose-500">*</span>
+                          </>
+                        }
+                        placeholder="e.g., Broken streetlight, pothole on main road..."
                         value={formData.title}
                         onChange={(e) =>
                           setFormData((prev) => ({
@@ -392,8 +687,13 @@ export default function ReportPage() {
                         error={validationErrors.title}
                       />
                       <Textarea
-                        label="Description"
-                        placeholder="Please describe the issue in detail..."
+                        label={
+                          <>
+                            Can you describe it?{" "}
+                            <span className="text-rose-500">*</span>
+                          </>
+                        }
+                        placeholder="Give us details so we can help faster. What did you see? When did it start?"
                         value={formData.description}
                         onChange={(e) =>
                           setFormData((prev) => ({
@@ -406,7 +706,8 @@ export default function ReportPage() {
                     </motion.div>
                   )}
 
-                  {currentStep === 2 && (
+                  {/* Step 3: Evidence */}
+                  {currentStep === 3 && (
                     <motion.div
                       key="step3"
                       initial={{ opacity: 0, x: 20 }}
@@ -415,11 +716,26 @@ export default function ReportPage() {
                       transition={{ duration: 0.2 }}
                       className="space-y-6"
                     >
+                      {/* Step Header */}
+                      <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <ImageIcon className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <h2 className="font-semibold text-gray-900">
+                            Add Photo
+                          </h2>
+                          <p className="text-sm text-gray-500">
+                            A picture helps us understand better
+                          </p>
+                        </div>
+                      </div>
+
                       <div className="space-y-2">
-                        <span className="block text-sm font-semibold text-gray-700">
+                        <span className="block text-sm font-semibold text-foreground">
                           Photo Evidence (Optional)
                         </span>
-                        <div className="mt-2 flex justify-center rounded-xl border-2 border-dashed border-gray-300 px-6 py-10 hover:bg-gray-50 transition-colors relative bg-white/50">
+                        <div className="mt-2 flex justify-center rounded-xl border-2 border-dashed border-gray-200 px-6 py-10 hover:bg-gray-50 hover:border-primary/30 transition-all cursor-pointer relative bg-white">
                           {formData.imagePreview ? (
                             <div className="relative w-full aspect-video rounded-lg overflow-hidden group">
                               <Image
@@ -438,7 +754,7 @@ export default function ReportPage() {
                                       imagePreview: null,
                                     }));
                                   }}
-                                  className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors"
+                                  className="bg-rose-500 text-white p-2 rounded-full hover:bg-rose-600 transition-colors"
                                 >
                                   <X className="w-5 h-5" />
                                 </button>
@@ -450,10 +766,10 @@ export default function ReportPage() {
                                 className="mx-auto h-12 w-12 text-gray-300"
                                 aria-hidden="true"
                               />
-                              <div className="mt-4 flex text-sm leading-6 text-gray-600 justify-center">
+                              <div className="mt-4 flex text-sm leading-6 text-muted-foreground justify-center">
                                 <label
                                   htmlFor="file-upload"
-                                  className="relative cursor-pointer rounded-md bg-transparent font-semibold text-vinta-purple focus-within:outline-none focus-within:ring-2 focus-within:ring-vinta-purple focus-within:ring-offset-2 hover:text-vinta-pink"
+                                  className="relative cursor-pointer rounded-md bg-transparent font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 hover:text-primary/80"
                                 >
                                   <span>Upload a file</span>
                                   <input
@@ -467,14 +783,14 @@ export default function ReportPage() {
                                 </label>
                                 <p className="pl-1">or drag and drop</p>
                               </div>
-                              <p className="text-xs leading-5 text-gray-600">
+                              <p className="text-xs leading-5 text-muted-foreground">
                                 PNG, JPG, GIF up to 10MB
                               </p>
                             </div>
                           )}
                         </div>
                         {validationErrors.image && (
-                          <p className="text-sm text-red-500">
+                          <p className="text-sm text-rose-500">
                             {validationErrors.image}
                           </p>
                         )}
@@ -482,7 +798,8 @@ export default function ReportPage() {
                     </motion.div>
                   )}
 
-                  {currentStep === 3 && (
+                  {/* Step 4: Review */}
+                  {currentStep === 4 && (
                     <motion.div
                       key="step4"
                       initial={{ opacity: 0, x: 20 }}
@@ -491,9 +808,25 @@ export default function ReportPage() {
                       transition={{ duration: 0.2 }}
                       className="space-y-6"
                     >
+                      {/* Step Header */}
+                      <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Send className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <h2 className="font-semibold text-gray-900">
+                            Review & Submit
+                          </h2>
+                          <p className="text-sm text-gray-500">
+                            Almost done! Check your details
+                          </p>
+                        </div>
+                      </div>
+
                       <Input
                         label="Contact Number (Optional)"
-                        placeholder="For updates on your report"
+                        description="We'll text you updates about your report"
+                        placeholder="09XX XXX XXXX"
                         value={formData.contactNumber}
                         onChange={(e) =>
                           setFormData((prev) => ({
@@ -504,24 +837,72 @@ export default function ReportPage() {
                         error={validationErrors.contactNumber}
                       />
 
-                      <div className="bg-gray-50 rounded-xl p-4 space-y-3 text-sm border border-gray-100">
-                        <h3 className="font-semibold text-gray-900">Summary</h3>
+                      {/* Summary Card */}
+                      <div className="bg-gradient-to-br from-gray-50 to-purple-50/30 rounded-xl p-5 space-y-4 text-sm border border-gray-100">
+                        <h3 className="font-semibold text-foreground">
+                          Summary
+                        </h3>
                         <div className="grid grid-cols-3 gap-2">
-                          <span className="text-gray-500">Category:</span>
+                          <span className="text-muted-foreground">
+                            Category:
+                          </span>
                           <span className="col-span-2 font-medium">
                             {formData.category?.name}
                           </span>
 
-                          <span className="text-gray-500">Title:</span>
+                          <span className="text-muted-foreground">
+                            Barangay:
+                          </span>
+                          <span className="col-span-2 font-medium">
+                            {formData.barangay?.name}
+                          </span>
+
+                          <span className="text-muted-foreground">Title:</span>
                           <span className="col-span-2 font-medium">
                             {formData.title}
                           </span>
 
-                          <span className="text-gray-500">Location:</span>
-                          <span className="col-span-2 font-medium">
-                            {formData.location}
-                          </span>
+                          {formData.location && (
+                            <>
+                              <span className="text-muted-foreground">
+                                Location:
+                              </span>
+                              <span className="col-span-2 font-medium">
+                                {formData.location}
+                              </span>
+                            </>
+                          )}
                         </div>
+                      </div>
+
+                      {/* Anonymous Submission Checkbox */}
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.isAnonymous}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                isAnonymous: e.target.checked,
+                              }))
+                            }
+                            className="mt-0.5 rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <UserX className="w-4 h-4 text-gray-600" />
+                              <span className="font-medium text-gray-900">
+                                Submit anonymously
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Your name will be hidden from public view. Only
+                              administrators can see your identity for follow-up
+                              purposes.
+                            </p>
+                          </div>
+                        </label>
                       </div>
                     </motion.div>
                   )}
@@ -532,27 +913,32 @@ export default function ReportPage() {
             {!success && (
               <div className="flex justify-between mt-8 pt-6 border-t border-gray-100">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   onClick={handleBack}
                   disabled={currentStep === 0 || isLoading}
-                  className={currentStep === 0 ? "invisible" : ""}
+                  className={currentStep === 0 ? "invisible" : "gap-2"}
                 >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  <ArrowLeft className="w-4 h-4" />
                   Back
                 </Button>
 
                 {currentStep < steps.length - 1 ? (
-                  <Button onClick={handleNext}>
-                    Next Step
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                  <Button
+                    onClick={handleNext}
+                    variant="primary"
+                    className="gap-2 min-w-[140px]"
+                  >
+                    Continue
+                    <ArrowRight className="w-4 h-4" />
                   </Button>
                 ) : (
                   <Button
                     onClick={handleSubmit}
                     disabled={isLoading}
                     variant="primary"
-                    className="bg-gradient-to-r from-vinta-purple to-vinta-pink shadow-vinta-purple/25"
+                    className="gap-2 min-w-[160px]"
                   >
+                    <Send className="w-4 h-4" />
                     {isLoading ? "Submitting..." : "Submit Report"}
                   </Button>
                 )}

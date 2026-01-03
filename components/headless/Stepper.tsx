@@ -28,9 +28,9 @@ export function Stepper({ steps }: StepperProps) {
               className={cn(
                 "group flex flex-col border-l-4 py-2 pl-4 md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4 transition-colors duration-300",
                 step.status === "complete"
-                  ? "border-vinta-purple"
+                  ? "border-primary"
                   : step.status === "current"
-                  ? "border-vinta-pink"
+                  ? "border-primary/60"
                   : "border-gray-200"
               )}
             >
@@ -38,9 +38,9 @@ export function Stepper({ steps }: StepperProps) {
                 className={cn(
                   "text-xs font-semibold uppercase tracking-wide transition-colors duration-300",
                   step.status === "complete"
-                    ? "text-vinta-purple"
+                    ? "text-primary"
                     : step.status === "current"
-                    ? "text-vinta-pink"
+                    ? "text-primary/80"
                     : "text-gray-500"
                 )}
               >

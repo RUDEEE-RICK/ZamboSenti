@@ -1,191 +1,499 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { AppHeader } from '@/components/app-header';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, FileText, AlertCircle, MapPin, Calendar, ChevronRight, Plus } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-import { AnimatedBackground } from '@/components/animated-background';
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { AppHeader } from "@/components/app-header";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  ArrowLeft,
+  Loader2,
+  FileText,
+  AlertCircle,
+  MapPin,
+  Calendar,
+  ChevronRight,
+  Plus,
+  Search,
+  Filter,
+  X,
+} from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { COMPLAINT_CATEGORIES } from "@/lib/constants/complaint-constants";
+import { BARANGAYS } from "@/lib/data/barangays";
 
 interface Complaint {
-    id: string;
-    title: string;
-    category: string;
-    status: string;
-    created_at: string;
-    updated_at: string;
-    location: string;
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  location: string;
+  barangay: string | null;
+  is_anonymous: boolean;
 }
 
-const STATUS_STYLES: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    processing: 'bg-blue-100 text-blue-800 border-blue-200',
-    solved: 'bg-green-100 text-green-800 border-green-200',
-    rejected: 'bg-red-100 text-red-800 border-red-200',
+const getStatusStyles = (status: string) => {
+  switch (status) {
+    case "pending":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    case "processing":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+    case "solved":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "rejected":
+      return "bg-rose-50 text-rose-700 border-rose-200";
+    default:
+      return "bg-gray-50 text-gray-700 border-gray-200";
+  }
 };
 
 export default function MyComplaintsPage() {
-    const router = useRouter();
-    const [complaints, setComplaints] = useState<Complaint[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | "all">("all");
+  const [selectedStatus, setSelectedStatus] = useState<string | "all">("all");
+  const [selectedBarangay, setSelectedBarangay] = useState<string | "all">("all");
+  const [groupBy, setGroupBy] = useState<"none" | "barangay">("none");
 
-    const fetchUserComplaints = useCallback(async () => {
-        const supabase = createClient();
-        setIsLoading(true);
+  const fetchUserComplaints = useCallback(async () => {
+    const supabase = createClient();
+    setIsLoading(true);
 
-        try {
-            const { data: { user }, error: authError } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-            if (authError || !user) {
-                router.push('/auth/login');
-                return;
-            }
+      if (authError || !user) {
+        router.push("/auth/login");
+        return;
+      }
 
-            const { data, error: fetchError } = await supabase
-                .from('complaints')
-                .select('id, title, category, status, created_at, updated_at, location')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
+      // Check if user is admin
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("user_roles")
+        .eq("id", user.id)
+        .single();
 
-            if (fetchError) {
-                throw new Error(fetchError.message);
-            }
+      const userIsAdmin = profile?.user_roles === "admin";
+      setIsAdmin(userIsAdmin);
 
-            setComplaints(data || []);
-        } catch (err) {
-            console.error('Error fetching complaints:', err);
-            setError(err instanceof Error ? err.message : 'Failed to fetch complaints');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [router]);
+      // Redirect admins to admin complaints page
+      if (userIsAdmin) {
+        router.push("/admin/complaints");
+        return;
+      }
 
-    useEffect(() => {
-        fetchUserComplaints();
-    }, [fetchUserComplaints]);
+      const { data, error: fetchError } = await supabase
+        .from("complaints")
+        .select(
+          "id, title, category, status, created_at, updated_at, location, barangay, is_anonymous"
+        )
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-background relative overflow-hidden">
-                <AnimatedBackground />
-                <AppHeader title="My Complaints" showNotifications={false} />
-                <div className="max-w-screen-xl mx-auto px-4 py-6 flex items-center justify-center min-h-[50vh] relative z-10">
-                    <div className="flex flex-col items-center gap-3 bg-white/80 backdrop-blur-md p-8 rounded-2xl shadow-lg border border-white/50">
-                        <Loader2 className="w-8 h-8 animate-spin text-vinta-purple" />
-                        <p className="text-lg font-medium text-vinta-purple-dark">Loading your complaints...</p>
-                    </div>
-                </div>
-            </div>
-        );
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+
+      setComplaints(data || []);
+    } catch (err) {
+      console.error("Error fetching complaints:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch complaints"
+      );
+    } finally {
+      setIsLoading(false);
     }
+  }, [router]);
 
+  useEffect(() => {
+    fetchUserComplaints();
+  }, [fetchUserComplaints]);
+
+  // Filter complaints based on all criteria
+  const filteredComplaints = complaints.filter((complaint) => {
+    const matchesSearch =
+      searchQuery === "" ||
+      complaint.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      complaint.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      complaint.location.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesCategory =
+      selectedCategory === "all" || complaint.category === selectedCategory;
+
+    const matchesStatus =
+      selectedStatus === "all" || complaint.status === selectedStatus;
+
+    const matchesBarangay =
+      selectedBarangay === "all" || complaint.barangay === selectedBarangay;
+
+    return matchesSearch && matchesCategory && matchesStatus && matchesBarangay;
+  });
+
+  // Group by barangay if enabled
+  const groupedComplaints =
+    groupBy === "barangay"
+      ? filteredComplaints.reduce((acc, complaint) => {
+          const barangayKey = complaint.barangay || "Unspecified";
+          if (!acc[barangayKey]) {
+            acc[barangayKey] = [];
+          }
+          acc[barangayKey].push(complaint);
+          return acc;
+        }, {} as Record<string, Complaint[]>)
+      : { All: filteredComplaints };
+
+  if (isLoading) {
     return (
-        <div className="min-h-screen bg-background relative overflow-hidden">
-            <AnimatedBackground />
-            <AppHeader title="My Complaints" showNotifications={false} />
-
-            <div className="max-w-7xl mx-auto px-4 py-8 relative z-10 space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <button
-                            onClick={() => router.push('/account')}
-                            className="group mb-2 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-vinta-purple transition-colors bg-white/50 backdrop-blur-sm px-4 py-2 rounded-full border border-white/50 shadow-sm hover:shadow-md"
-                        >
-                            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" /> 
-                            Back to Account
-                        </button>
-                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-vinta-purple-dark to-vinta-pink-dark">
-                            My Complaints
-                        </h1>
-                        <p className="text-muted-foreground mt-1">Track the status of your submitted complaints</p>
-                    </div>
-                    <Button 
-                        onClick={() => router.push('/report')}
-                        className="bg-gradient-to-r from-vinta-purple to-vinta-pink hover:from-vinta-purple-dark hover:to-vinta-pink-dark text-white shadow-lg hover:shadow-xl transition-all duration-300"
-                    >
-                        <Plus className="w-4 h-4 mr-2" />
-                        New Complaint
-                    </Button>
-                </div>
-
-                {error && (
-                    <Card className="border-red-200 bg-red-50/90 backdrop-blur-sm shadow-sm animate-in slide-in-from-top-2">
-                        <div className="p-4 flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                            <div className="flex-1">
-                                <h4 className="font-semibold text-red-900">Error</h4>
-                                <p className="text-sm text-red-700 mt-1">{error}</p>
-                            </div>
-                        </div>
-                    </Card>
-                )}
-
-                {complaints.length === 0 ? (
-                    <Card className="p-12 text-center bg-white/70 backdrop-blur-md border-white/50 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="w-20 h-20 bg-vinta-purple/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <FileText className="w-10 h-10 text-vinta-purple" />
-                        </div>
-                        <h3 className="text-xl font-semibold mb-2 text-foreground">No complaints found</h3>
-                        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                            You haven&apos;t submitted any complaints yet. If you notice an issue in your community, please report it.
-                        </p>
-                        <Button 
-                            onClick={() => router.push('/report')}
-                            className="bg-gradient-to-r from-vinta-purple to-vinta-pink text-white shadow-lg hover:shadow-xl transition-all"
-                        >
-                            Submit a Report
-                        </Button>
-                    </Card>
-                ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {complaints.map((complaint, index) => (
-                            <Card 
-                                key={complaint.id}
-                                className="group relative overflow-hidden bg-white/70 backdrop-blur-md border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4"
-                                style={{ animationDelay: `${index * 100}ms` }}
-                                onClick={() => router.push(`/account/my-complaints/${complaint.id}`)}
-                            >
-                                <div className="absolute inset-0 bg-gradient-to-br from-vinta-purple/5 to-vinta-pink/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                                
-                                <div className="p-6 relative z-10">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <Badge className={`${STATUS_STYLES[complaint.status] || 'bg-gray-100 text-gray-800'} border px-2.5 py-0.5 rounded-full font-medium capitalize shadow-sm`}>
-                                            {complaint.status}
-                                        </Badge>
-                                        <span className="text-xs text-muted-foreground flex items-center gap-1 bg-white/50 px-2 py-1 rounded-full">
-                                            <Calendar className="w-3 h-3" />
-                                            {new Date(complaint.created_at).toLocaleDateString()}
-                                        </span>
-                                    </div>
-                                    
-                                    <h3 className="font-bold text-lg mb-2 line-clamp-1 group-hover:text-vinta-purple transition-colors">
-                                        {complaint.title}
-                                    </h3>
-                                    
-                                    <div className="space-y-2 text-sm text-muted-foreground mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <MapPin className="w-4 h-4 text-vinta-purple/70" />
-                                            <span className="line-clamp-1">{complaint.location}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <FileText className="w-4 h-4 text-vinta-purple/70" />
-                                            <span className="capitalize">{complaint.category}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center text-sm font-medium text-vinta-purple opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
-                                        View Details <ChevronRight className="w-4 h-4 ml-1" />
-                                    </div>
-                                </div>
-                            </Card>
-                        ))}
-                    </div>
-                )}
-            </div>
+      <div className="min-h-screen pb-24 md:pb-8">
+        <AppHeader title="My Complaints" showNotifications={false} />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>Loading complaints...</span>
+          </div>
         </div>
+      </div>
     );
+  }
+
+  return (
+    <div className="min-h-screen pb-24 md:pb-8">
+      <AppHeader title="My Complaints" showNotifications={false} />
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <button
+                onClick={() => router.push("/account")}
+                className="text-sm text-muted-foreground hover:text-primary font-medium flex items-center gap-1 mb-2 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Account
+              </button>
+              <p className="text-sm text-muted-foreground">
+                Track the status of your submitted complaints
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => router.push("/report")}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Complaint
+              </Button>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search complaints by title, category, or location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 h-11 rounded-xl border-gray-200"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Filters Row */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Category Filter */}
+            <div className="flex-1">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Category
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={selectedCategory === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory("all")}
+                  className="rounded-full h-8 text-xs"
+                >
+                  All
+                </Button>
+                {COMPLAINT_CATEGORIES.map((cat) => (
+                  <Button
+                    key={cat}
+                    variant={selectedCategory === cat ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedCategory(cat)}
+                    className="rounded-full h-8 text-xs"
+                  >
+                    {cat}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Status and Barangay Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Status Filter */}
+            <div className="flex-1">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Status
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={selectedStatus === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedStatus("all")}
+                  className="rounded-full h-8 text-xs"
+                >
+                  All
+                </Button>
+                <Button
+                  variant={selectedStatus === "pending" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedStatus("pending")}
+                  className="rounded-full h-8 text-xs"
+                >
+                  Pending
+                </Button>
+                <Button
+                  variant={selectedStatus === "processing" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedStatus("processing")}
+                  className="rounded-full h-8 text-xs"
+                >
+                  Processing
+                </Button>
+                <Button
+                  variant={selectedStatus === "solved" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedStatus("solved")}
+                  className="rounded-full h-8 text-xs"
+                >
+                  Solved
+                </Button>
+                <Button
+                  variant={selectedStatus === "rejected" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedStatus("rejected")}
+                  className="rounded-full h-8 text-xs"
+                >
+                  Rejected
+                </Button>
+              </div>
+            </div>
+
+            {/* Barangay Filter */}
+            <div className="flex-1">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Barangay
+              </label>
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <select
+                  value={selectedBarangay}
+                  onChange={(e) => setSelectedBarangay(e.target.value)}
+                  className="w-full h-9 pl-10 pr-4 rounded-full border border-gray-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none cursor-pointer"
+                >
+                  <option value="all">All Barangays</option>
+                  {BARANGAYS.map((b) => (
+                    <option key={b.id} value={b.name}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Group By Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Group by:</span>
+              <Button
+                variant={groupBy === "none" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setGroupBy("none")}
+                className="rounded-full h-7 text-xs"
+              >
+                None
+              </Button>
+              <Button
+                variant={groupBy === "barangay" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setGroupBy("barangay")}
+                className="rounded-full h-7 text-xs"
+              >
+                Barangay
+              </Button>
+            </div>
+            {(searchQuery || selectedCategory !== "all" || selectedStatus !== "all" || selectedBarangay !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCategory("all");
+                  setSelectedStatus("all");
+                  setSelectedBarangay("all");
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <Card className="border-rose-200 bg-rose-50 p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <p className="text-sm text-rose-700">{error}</p>
+            </div>
+          </Card>
+        )}
+
+        {/* Complaints List */}
+        {complaints.length === 0 ? (
+          <Card className="p-12 text-center border-gray-100">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FileText className="w-8 h-8 text-primary" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">No complaints found</h3>
+            <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+              You haven&apos;t submitted any complaints yet. If you notice an
+              issue, please report it.
+            </p>
+            <Button
+              onClick={() => router.push("/report")}
+              className="bg-primary hover:bg-primary/90"
+            >
+              Submit a Report
+            </Button>
+          </Card>
+        ) : filteredComplaints.length === 0 ? (
+          <Card className="p-12 text-center border-gray-100">
+            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+              <FileText className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-1">No complaints match your filters</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Try adjusting your search or filter criteria.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedCategory("all");
+                setSelectedStatus("all");
+                setSelectedBarangay("all");
+              }}
+            >
+              Clear filters
+            </Button>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {Object.entries(groupedComplaints).map(([groupKey, groupComplaints]) => (
+              <div key={groupKey} className="space-y-3">
+                {/* Group Header */}
+                {groupBy === "barangay" && (
+                  <div className="flex items-center gap-3 px-1">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-primary" />
+                      <h2 className="font-semibold text-sm text-foreground">
+                        {groupKey}
+                      </h2>
+                    </div>
+                    <div className="h-px flex-1 bg-gray-200" />
+                    <span className="text-xs text-muted-foreground">
+                      {groupComplaints.length} {groupComplaints.length === 1 ? "complaint" : "complaints"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Complaint Cards */}
+                {groupComplaints.map((complaint) => (
+                  <Card
+                    key={complaint.id}
+                    className="p-4 card-hover border-gray-100 cursor-pointer transition-all hover:shadow-md"
+                    onClick={() =>
+                      router.push(`/account/my-complaints/${complaint.id}`)
+                    }
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h3 className="font-medium text-foreground">
+                            {complaint.title}
+                          </h3>
+                          <Badge
+                            className={`${getStatusStyles(
+                              complaint.status
+                            )} text-xs capitalize`}
+                          >
+                            {complaint.status}
+                          </Badge>
+                          {complaint.is_anonymous && (
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                              Anonymous
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span className="bg-gray-100 px-2 py-0.5 rounded">
+                            {complaint.category}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {complaint.location}
+                          </span>
+                          {complaint.barangay && groupBy !== "barangay" && (
+                            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded">
+                              {complaint.barangay}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(complaint.created_at).toLocaleDateString(
+                              "en-US",
+                              { month: "short", day: "numeric", year: "numeric" }
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

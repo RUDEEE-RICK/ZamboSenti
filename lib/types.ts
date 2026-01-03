@@ -32,17 +32,31 @@ export interface NewsArticle {
   featured?: boolean;
 }
 
-export interface EmergencyContact {
+export type EmergencyCategory =
+  | "police"
+  | "fire"
+  | "medical"
+  | "rescue"
+  | "disaster"
+  | "utility"
+  | "other";
+
+export interface EmergencyHotline {
   id: string;
-  type: "smart" | "tnt" | "landline";
-  number: string;
   label: string;
+  number: string;
+  sim_type: string;
+  barangay: string | null;
+  category: EmergencyCategory | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
 }
 
 export interface QuickAction {
   id: string;
   title: string;
-  icon: string;
+  icon: React.ElementType;
   route: string;
 }
 
@@ -59,4 +73,23 @@ export interface ExploreCategory {
   title: string;
   imageUrl: string;
   description: string;
+}
+
+export type AgencyCategory =
+  | "healthcare"
+  | "transport"
+  | "finance"
+  | "legal"
+  | "government"
+  | "social_services"
+  | "other";
+
+export interface Agency {
+  id: string;
+  name: string;
+  description: string;
+  external_link: string;
+  category: AgencyCategory;
+  created_at: string;
+  updated_at: string;
 }

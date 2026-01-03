@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/headless/Button";
-import { Input } from "@/components/headless/Input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
   Loader2,
@@ -15,20 +15,16 @@ import {
   Lock,
   User,
   Shield,
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
-  Heart,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AnimatedBackground } from "@/components/animated-background";
+import { BARANGAYS } from "@/lib/data/barangays";
 
 interface UserProfile {
   id: string;
   name: string;
   email: string;
   address: string;
+  barangay: string;
   contact_number: string;
   emergency_contact: string;
   birth_date: string;
@@ -111,6 +107,7 @@ export default function SettingsPage() {
         .update({
           name: profile.name,
           address: profile.address,
+          barangay: profile.barangay,
           contact_number: profile.contact_number,
           emergency_contact: profile.emergency_contact,
           birth_date: profile.birth_date,
@@ -176,15 +173,12 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <AnimatedBackground />
+      <div className="min-h-screen pb-24 md:pb-8">
         <AppHeader title="Settings" showNotifications={false} />
-        <div className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-center min-h-[50vh] relative z-10">
-          <div className="flex flex-col items-center gap-3 bg-white/80 backdrop-blur-md p-8 rounded-2xl shadow-lg border border-white/50">
-            <Loader2 className="w-8 h-8 animate-spin text-vinta-purple" />
-            <p className="text-lg font-medium text-vinta-purple-dark">
-              Loading your preferences...
-            </p>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>Loading...</span>
           </div>
         </div>
       </div>
@@ -192,188 +186,211 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      <AnimatedBackground />
+    <div className="min-h-screen pb-24 md:pb-8">
       <AppHeader title="Settings" showNotifications={false} />
 
-      <div className="max-w-5xl mx-auto px-4 py-8 relative z-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Back Button */}
         <button
           onClick={() => router.push("/account")}
-          className="group mb-6 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-vinta-purple transition-colors bg-white/50 backdrop-blur-sm px-4 py-2 rounded-full border border-white/50 shadow-sm hover:shadow-md"
+          className="text-sm text-muted-foreground hover:text-primary font-medium flex items-center gap-1 transition-colors"
         >
-          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+          <ArrowLeft className="w-4 h-4" />
           Back to Account
         </button>
 
-        <div className="grid lg:grid-cols-12 gap-8">
+        <div className="grid lg:grid-cols-4 gap-6">
           {/* Sidebar Navigation */}
-          <div className="lg:col-span-3 space-y-2">
-            <div className="bg-white/70 backdrop-blur-md border border-white/50 shadow-lg rounded-xl overflow-hidden p-2">
+          <div className="lg:col-span-1">
+            <Card className="p-2 border-gray-100">
               <button
                 onClick={() => setActiveTab("profile")}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
                   activeTab === "profile"
-                    ? "bg-gradient-to-r from-vinta-purple to-vinta-pink text-white shadow-md"
-                    : "text-muted-foreground hover:bg-white/50 hover:text-foreground"
+                    ? "bg-primary text-white"
+                    : "text-muted-foreground hover:bg-muted/50"
                 }`}
               >
                 <User className="w-4 h-4" />
-                Profile Details
+                Profile
               </button>
               <button
                 onClick={() => setActiveTab("security")}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
                   activeTab === "security"
-                    ? "bg-gradient-to-r from-vinta-purple to-vinta-pink text-white shadow-md"
-                    : "text-muted-foreground hover:bg-white/50 hover:text-foreground"
+                    ? "bg-primary text-white"
+                    : "text-muted-foreground hover:bg-muted/50"
                 }`}
               >
                 <Shield className="w-4 h-4" />
                 Security
               </button>
-            </div>
+            </Card>
           </div>
 
           {/* Main Content */}
-          <div className="lg:col-span-9 space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-vinta-purple-dark to-vinta-pink-dark">
-                  {activeTab === "profile"
-                    ? "Profile Information"
-                    : "Security Settings"}
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  {activeTab === "profile"
-                    ? "Update your personal details and contact information."
-                    : "Manage your password and account security."}
-                </p>
-              </div>
+          <div className="lg:col-span-3 space-y-4">
+            <div>
+              <h1 className="text-xl font-bold text-foreground">
+                {activeTab === "profile"
+                  ? "Profile Information"
+                  : "Security Settings"}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {activeTab === "profile"
+                  ? "Update your personal details."
+                  : "Manage your password and security."}
+              </p>
             </div>
 
+            {/* Alerts */}
             {error && (
-              <div className="animate-in slide-in-from-top-2 fade-in duration-300">
-                <Card className="border-red-200 bg-red-50/90 backdrop-blur-sm shadow-sm">
-                  <div className="p-4 flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-red-900">Error</h4>
-                      <p className="text-sm text-red-700 mt-1">{error}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-100"
-                      onClick={() => setError(null)}
-                    >
-                      Dismiss
-                    </Button>
+              <Card className="border-rose-200 bg-rose-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm text-rose-700">{error}</p>
                   </div>
-                </Card>
-              </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setError(null)}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </Card>
             )}
 
             {success && (
-              <div className="animate-in slide-in-from-top-2 fade-in duration-300">
-                <Card className="border-green-200 bg-green-50/90 backdrop-blur-sm shadow-sm">
-                  <div className="p-4 flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-green-900">Success</h4>
-                      <p className="text-sm text-green-700 mt-1">{success}</p>
-                    </div>
-                  </div>
-                </Card>
-              </div>
+              <Card className="border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  <p className="text-sm text-emerald-700">{success}</p>
+                </div>
+              </Card>
             )}
 
-            <div className="bg-white/70 backdrop-blur-md border border-white/50 shadow-xl overflow-hidden rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Form Content */}
+            <Card className="border-gray-100">
               {activeTab === "profile" ? (
-                <div className="p-6 space-y-6">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <Input
-                      label="Full Name"
-                      id="name"
-                      value={profile?.name || ""}
-                      onChange={(e) =>
-                        handleInputChange("name", e.target.value)
-                      }
-                      placeholder="Your full name"
-                      startIcon={<User className="w-4 h-4" />}
-                    />
+                <div className="p-6 space-y-5">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Full Name
+                      </label>
+                      <Input
+                        value={profile?.name || ""}
+                        onChange={(e) =>
+                          handleInputChange("name", e.target.value)
+                        }
+                        placeholder="Your full name"
+                      />
+                    </div>
 
                     <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Email Address
+                      </label>
                       <Input
-                        label="Email Address"
-                        id="email"
                         value={profile?.email || ""}
                         disabled
-                        className="bg-gray-100/50"
-                        startIcon={<Mail className="w-4 h-4" />}
+                        className="bg-gray-50"
                       />
-                      <p className="text-xs text-muted-foreground ml-1">
+                      <p className="text-xs text-muted-foreground">
                         Email cannot be changed
                       </p>
                     </div>
                   </div>
 
-                  <Input
-                    label="Address"
-                    id="address"
-                    value={profile?.address || ""}
-                    onChange={(e) =>
-                      handleInputChange("address", e.target.value)
-                    }
-                    placeholder="Your complete address"
-                    startIcon={<MapPin className="w-4 h-4" />}
-                  />
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Street Address
+                      </label>
+                      <Input
+                        value={profile?.address || ""}
+                        onChange={(e) =>
+                          handleInputChange("address", e.target.value)
+                        }
+                        placeholder="Your street address"
+                      />
+                    </div>
 
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <Input
-                      label="Contact Number"
-                      id="contact_number"
-                      value={profile?.contact_number || ""}
-                      onChange={(e) =>
-                        handleInputChange("contact_number", e.target.value)
-                      }
-                      placeholder="e.g. 09123456789"
-                      startIcon={<Phone className="w-4 h-4" />}
-                    />
-
-                    <Input
-                      label="Emergency Contact"
-                      id="emergency_contact"
-                      value={profile?.emergency_contact || ""}
-                      onChange={(e) =>
-                        handleInputChange("emergency_contact", e.target.value)
-                      }
-                      placeholder="Emergency contact number"
-                      startIcon={<Heart className="w-4 h-4" />}
-                    />
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Barangay
+                      </label>
+                      <select
+                        value={profile?.barangay || ""}
+                        onChange={(e) =>
+                          handleInputChange("barangay", e.target.value)
+                        }
+                        className="flex h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      >
+                        <option value="">Select barangay</option>
+                        {BARANGAYS.map((b) => (
+                          <option key={b.id} value={b.name}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <Input
-                      label="Birth Date"
-                      id="birth_date"
-                      type="date"
-                      value={profile?.birth_date || ""}
-                      onChange={(e) =>
-                        handleInputChange("birth_date", e.target.value)
-                      }
-                      startIcon={<Calendar className="w-4 h-4" />}
-                    />
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Contact Number
+                      </label>
+                      <Input
+                        value={profile?.contact_number || ""}
+                        onChange={(e) =>
+                          handleInputChange("contact_number", e.target.value)
+                        }
+                        placeholder="e.g. 09123456789"
+                      />
+                    </div>
 
-                    <div className="w-full">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Emergency Contact
+                      </label>
+                      <Input
+                        value={profile?.emergency_contact || ""}
+                        onChange={(e) =>
+                          handleInputChange("emergency_contact", e.target.value)
+                        }
+                        placeholder="Emergency contact number"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Birth Date
+                      </label>
+                      <Input
+                        type="date"
+                        value={profile?.birth_date || ""}
+                        onChange={(e) =>
+                          handleInputChange("birth_date", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
                         Gender
                       </label>
                       <select
-                        id="gender"
                         value={profile?.gender || ""}
                         onChange={(e) =>
                           handleInputChange("gender", e.target.value)
                         }
-                        className="block w-full rounded-xl border-2 border-gray-200 bg-white/50 px-4 py-2.5 text-sm text-gray-900 focus:border-vinta-purple focus:outline-none focus:ring-4 focus:ring-vinta-purple/10 transition-all duration-200"
+                        className="flex h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                       >
                         <option value="">Select gender</option>
                         <option value="male">Male</option>
@@ -387,7 +404,7 @@ export default function SettingsPage() {
                     <Button
                       onClick={handleSaveProfile}
                       disabled={isSaving}
-                      className="bg-gradient-to-r from-vinta-purple to-vinta-pink hover:from-vinta-purple-dark hover:to-vinta-pink-dark text-white shadow-lg hover:shadow-xl transition-all duration-300 min-w-[140px]"
+                      className="bg-primary hover:bg-primary/90"
                     >
                       {isSaving ? (
                         <>
@@ -404,58 +421,63 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-6 space-y-6">
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <div className="p-6 space-y-5">
+                  <Card className="bg-amber-50 border-amber-200 p-4">
                     <div className="flex gap-3">
-                      <Lock className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                      <Lock className="w-5 h-5 text-amber-600 flex-shrink-0" />
                       <div>
-                        <h4 className="font-medium text-yellow-900">
+                        <h4 className="font-medium text-amber-900">
                           Password Security
                         </h4>
-                        <p className="text-sm text-yellow-700 mt-1">
-                          Ensure your account stays safe by using a strong
-                          password. We recommend using a combination of letters,
-                          numbers, and symbols.
+                        <p className="text-sm text-amber-700 mt-1">
+                          Use a strong password with letters, numbers, and
+                          symbols.
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </Card>
 
                   <div className="space-y-4 max-w-md">
-                    <Input
-                      label="New Password"
-                      id="newPassword"
-                      type="password"
-                      value={passwordData.newPassword}
-                      onChange={(e) =>
-                        setPasswordData({
-                          ...passwordData,
-                          newPassword: e.target.value,
-                        })
-                      }
-                      placeholder="Enter new password"
-                    />
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        New Password
+                      </label>
+                      <Input
+                        type="password"
+                        value={passwordData.newPassword}
+                        onChange={(e) =>
+                          setPasswordData({
+                            ...passwordData,
+                            newPassword: e.target.value,
+                          })
+                        }
+                        placeholder="Enter new password"
+                      />
+                    </div>
 
-                    <Input
-                      label="Confirm New Password"
-                      id="confirmPassword"
-                      type="password"
-                      value={passwordData.confirmPassword}
-                      onChange={(e) =>
-                        setPasswordData({
-                          ...passwordData,
-                          confirmPassword: e.target.value,
-                        })
-                      }
-                      placeholder="Confirm new password"
-                    />
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">
+                        Confirm New Password
+                      </label>
+                      <Input
+                        type="password"
+                        value={passwordData.confirmPassword}
+                        onChange={(e) =>
+                          setPasswordData({
+                            ...passwordData,
+                            confirmPassword: e.target.value,
+                          })
+                        }
+                        placeholder="Confirm new password"
+                      />
+                    </div>
                   </div>
 
                   <div className="pt-4 flex justify-end">
                     <Button
                       onClick={handleChangePassword}
                       disabled={isSaving || !passwordData.newPassword}
-                      className="bg-gradient-to-r from-vinta-purple to-vinta-pink hover:from-vinta-purple-dark hover:to-vinta-pink-dark text-white shadow-lg hover:shadow-xl transition-all duration-300 min-w-[160px]"
+                      className="bg-primary hover:bg-primary/90"
                     >
                       {isSaving ? (
                         <>
@@ -472,7 +494,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
           </div>
         </div>
       </div>

@@ -1,247 +1,449 @@
 "use client";
 
 import Link from "next/link";
-import { CloudSun, MapPin, Shield, FileText, ChevronRight } from "lucide-react";
+import {
+  MapPin,
+  ChevronRight,
+  FileText,
+  Building2,
+  Phone,
+  TrendingUp,
+  Settings,
+} from "lucide-react";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { quickActions } from "@/lib/data/mockData";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/headless/Button";
+import { Button } from "@/components/ui/button";
 import { getGreeting } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { ReportSubmissionForm } from "@/components/report-submission-form";
 import { NewsList } from "@/components/news-list";
-import { AnimatedBackground } from "@/components/animated-background";
 
 export default function HomePage() {
   const { user, loading } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [userBarangay, setUserBarangay] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    processing: 0,
+    solved: 0,
+    resolvedPercentage: 0,
+  });
+  const [showHero, setShowHero] = useState(false);
+
+  // Check if user is logged in and control hero display
+  useEffect(() => {
+    if (!loading) {
+      setShowHero(!user);
+    }
+  }, [user, loading]);
 
   useEffect(() => {
-    const checkAdminStatus = async () => {
+    const checkAdminAndFetchProfile = async () => {
       if (user) {
         const supabase = createClient();
         const { data } = await supabase
           .from("profiles")
-          .select("user_roles")
+          .select("user_roles, barangay")
           .eq("id", user.id)
           .single();
 
-        setIsAdmin(data?.user_roles === "admin");
+        const userIsAdmin = data?.user_roles === "admin";
+        setIsAdmin(userIsAdmin);
+        setUserBarangay(data?.barangay || null);
+
+        // Fetch stats after determining admin status
+        fetchStats(userIsAdmin);
       } else {
         setIsAdmin(false);
+        setUserBarangay(null);
+        setStats({
+          total: 0,
+          pending: 0,
+          processing: 0,
+          solved: 0,
+          resolvedPercentage: 0,
+        });
+      }
+    };
+
+    const fetchStats = async (adminStatus: boolean) => {
+      const supabase = createClient();
+
+      if (adminStatus) {
+        // Admin sees all complaints stats
+        const { data: complaints } = await supabase
+          .from("complaints")
+          .select("status");
+
+        if (complaints) {
+          const total = complaints.length;
+          const pending = complaints.filter(
+            (c) => c.status === "pending"
+          ).length;
+          const processing = complaints.filter(
+            (c) => c.status === "processing"
+          ).length;
+          const solved = complaints.filter((c) => c.status === "solved").length;
+          const resolvedPercentage =
+            total > 0 ? Math.round((solved / total) * 100) : 0;
+
+          setStats({ total, pending, processing, solved, resolvedPercentage });
+        }
+      } else if (user) {
+        // Regular user sees their own complaint stats
+        const { data: complaints } = await supabase
+          .from("complaints")
+          .select("status")
+          .eq("user_id", user.id);
+
+        if (complaints) {
+          const total = complaints.length;
+          const pending = complaints.filter(
+            (c) => c.status === "pending"
+          ).length;
+          const processing = complaints.filter(
+            (c) => c.status === "processing"
+          ).length;
+          const solved = complaints.filter((c) => c.status === "solved").length;
+          const resolvedPercentage =
+            total > 0 ? Math.round((solved / total) * 100) : 0;
+
+          setStats({ total, pending, processing, solved, resolvedPercentage });
+        }
       }
     };
 
     if (!loading) {
-      checkAdminStatus();
+      checkAdminAndFetchProfile();
     }
   }, [user, loading]);
 
   return (
-    <div className="min-h-screen bg-background pb-24 overflow-x-hidden">
-      {/* Animated Header Background */}
-      <div className="relative bg-gradient-to-r from-vinta-purple to-vinta-pink shadow-lg overflow-hidden">
-        <AnimatedBackground />
+    <div className="min-h-screen pb-24 md:pb-8">
+      {/* Mobile Header */}
+      <div className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-lg border-b border-gray-100 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-gradient">ZamSolucion</h1>
+          </div>
+          <div className="flex items-center gap-1.5 bg-primary/5 px-2.5 py-1.5 rounded-full border border-primary/10">
+            <MapPin className="w-3 h-3 text-primary" />
+            <span className="text-xs font-semibold text-primary">
+              {user && userBarangay ? userBarangay : "Zamboanga City"}
+            </span>
+          </div>
+        </div>
+      </div>
 
-        <div className="relative z-10 px-4 py-6">
-          <div className="flex items-start justify-between text-white">
-            <div className="flex flex-col">
-              <h1 className="text-2xl font-extrabold tracking-tight drop-shadow-sm">
-                ZamSolucion
-              </h1>
-              <div className="flex items-center gap-2 pl-1">
-                <MapPin className="w-4 h-4 opacity-80" />
-                <span className="text-sm font-medium opacity-90">
-                  Zamboanga City
-                </span>
-              </div>
+      {/* Desktop Header */}
+      <div className="hidden md:block sticky top-0 z-30 bg-white/95 backdrop-blur-lg border-b border-gray-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gradient">ZamSolucion</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {loading ? "Welcome" : getGreeting()}
+                {user && user.user_metadata?.name
+                  ? `, ${user.user_metadata.name.split(" ")[0]}`
+                  : ""}
+              </p>
             </div>
-            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-sm">
-              <CloudSun className="w-5 h-5" />
-              <span className="text-sm font-bold">32°C</span>
+            <div className="flex items-center gap-3">
+              {user && (
+                <Link
+                  href="/account/settings"
+                  className="ml-1 p-2 py-1.5 flex items-center gap-2 rounded-full hover:bg-primary/10 transition-colors "
+                  title="Update barangay"
+                >
+                  <MapPin className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-primary">
+                    {user && userBarangay ? userBarangay : "Zamboanga City"}
+                  </span>
+                </Link>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-screen-xl mx-auto px-4 py-6 space-y-8">
-        {/* Hero Section */}
-        <div className="bg-gradient-to-br from-vinta-purple via-vinta-pink to-vinta-orange rounded-3xl p-1 relative overflow-hidden shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="bg-white/5 backdrop-blur-[2px] rounded-[22px] p-6 h-full relative overflow-hidden">
-            {/* Decorative Vinta Sail Pattern */}
-            <div className="absolute -right-10 -top-10 w-64 h-64 opacity-10 rotate-12">
-              <div className="w-full h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#fff_10px,#fff_20px)] rounded-full" />
-            </div>
-
-            <div className="relative z-10">
-              <h2 className="text-3xl font-bold text-white mb-2 animate-float">
-                {loading ? "Buenas Tardes" : getGreeting()}
-              </h2>
-              {user ? (
-                <p className="text-white/90 mb-4 text-lg font-light">
-                  Welcome back,{" "}
-                  <span className="font-semibold">
-                    {user.user_metadata?.name?.split(" ")[0] || "Citizen"}
-                  </span>
-                  !
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:space-y-8 space-y-4">
+        {/* Hero Section - Only for non-logged-in users */}
+        {showHero && (
+          <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary via-primary/90 to-primary/80 text-white fade-in">
+            <div className="p-6 md:p-10 relative">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+              <div className="relative z-10 max-w-xl">
+                <h1 className="text-3xl md:text-4xl font-bold mb-3">
+                  Your Voice,
                   <br />
-                  Ready to make Zamboanga City better?
+                  Our Action.
+                </h1>
+                <p className="text-white/80 mb-6 text-sm md:text-base leading-relaxed">
+                  Report issues, track complaints, and stay updated with the
+                  latest news in Zamboanga City.
                 </p>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-white/90 text-lg font-light">
-                    Join <span className="font-bold">ZamboSenti</span> to report
-                    issues and help improve our city together.
-                  </p>
+                <div className="flex flex-wrap gap-3">
                   <Button
-                    variant="secondary"
-                    className="bg-white text-vinta-purple hover:bg-white/90 font-bold border-none shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 rounded-xl px-6"
-                    as={Link}
-                    href="/auth/sign-up"
+                    className="bg-white text-primary hover:bg-white/90 font-semibold px-6 rounded-full"
+                    asChild
                   >
-                    Get Started
+                    <Link href="/auth/sign-up">Get Started</Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-white border border-white/30 hover:bg-white/10 font-medium px-6 rounded-full"
+                    asChild
+                  >
+                    <Link href="/auth/login">Sign In</Link>
                   </Button>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions Grid */}
-        {/* Quick Actions Grid or Admin Controls */}
-        <section>
-          {isAdmin ? (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500 delay-100">
-              <h3 className="text-lg font-semibold text-vinta-orange px-1">
-                Admin Controls
-              </h3>
-              <div className="space-y-3">
-                <Link href="/admin/complaints" className="block group">
-                  <Card className="p-4 flex items-center gap-4 bg-orange-50/60 backdrop-blur-sm border-orange-100 hover:bg-orange-100/80 hover:shadow-lg transition-all duration-300 group-hover:scale-[1.02]">
-                    <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors">
-                      <Shield className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                      <span className="font-semibold text-orange-900 block">
-                        Complaints Panel
-                      </span>
-                      <p className="text-xs text-orange-700">
-                        Manage all user reports
-                      </p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-orange-400 group-hover:text-orange-700 transition-colors" />
-                  </Card>
-                </Link>
-
-                <Link href="/admin/articles" className="block group">
-                  <Card className="p-4 flex items-center gap-4 bg-blue-50/60 backdrop-blur-sm border-blue-100 hover:bg-blue-100/80 hover:shadow-lg transition-all duration-300 group-hover:scale-[1.02]">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                      <span className="font-semibold text-blue-900 block">
-                        Article Management
-                      </span>
-                      <p className="text-xs text-blue-700">
-                        Create and edit news
-                      </p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-blue-400 group-hover:text-blue-700 transition-colors" />
-                  </Card>
-                </Link>
               </div>
-            </div>
-          ) : (
-            <>
-              <h3 className="text-xl font-bold mb-4 text-foreground flex items-center gap-2">
-                <span className="w-1 h-6 bg-vinta-purple rounded-full"></span>
-                Quick Actions
-              </h3>
-              <div className="grid grid-cols-4 gap-3">
-                {quickActions.map((action, index) => {
-                  const colors = [
-                    "text-vinta-purple",
-                    "text-vinta-pink",
-                    "text-vinta-orange",
-                    "text-vinta-cyan",
-                    "text-vinta-green",
-                    "text-vinta-yellow",
-                  ];
-                  const colorClass = colors[index % colors.length];
-
-                  return (
-                    <Link
-                      key={action.id}
-                      href={action.route}
-                      className="flex flex-col items-center justify-center p-4 bg-white border border-border/50 rounded-2xl shadow-sm hover:shadow-lg hover:border-vinta-purple/30 transition-all duration-300 group animate-in zoom-in-50 fill-mode-both"
-                      style={{ animationDelay: `${index * 100}ms` }}
-                    >
-                      <div
-                        className={`p-3 rounded-xl bg-gray-50 group-hover:bg-${colorClass.replace(
-                          "text-",
-                          ""
-                        )}/10 transition-colors duration-300 mb-2`}
-                      >
-                        <span
-                          className={`text-2xl group-hover:scale-110 transition-transform duration-300 block ${colorClass}`}
-                        >
-                          {action.icon}
-                        </span>
-                      </div>
-                      <span className="text-[10px] sm:text-xs text-center font-semibold text-muted-foreground group-hover:text-foreground leading-tight">
-                        {action.title}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </section>
-
-        {user && !isAdmin && (
-          <section className="animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300 fill-mode-both">
-            <ReportSubmissionForm />
-          </section>
-        )}
-
-        {!user && (
-          <Card className="bg-gradient-to-br from-vinta-cyan to-vinta-purple border-none p-1 shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300 fill-mode-both">
-            <div className="bg-white/10 backdrop-blur-sm p-6 rounded-xl">
-              <h3 className="text-xl font-bold text-white mb-2">
-                Help us improve our city
-              </h3>
-              <p className="text-white/80 mb-4 text-sm">
-                Create an account to report local issues directly to the city.
-              </p>
-              <Button
-                variant="secondary"
-                className="w-full bg-white text-vinta-purple hover:bg-white/90 font-semibold rounded-xl shadow-md"
-                as={Link}
-                href="/auth/login"
-              >
-                Sign in
-              </Button>
             </div>
           </Card>
         )}
 
-        <section className="animate-in fade-in slide-in-from-bottom-8 duration-700 delay-500 fill-mode-both">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold flex items-center gap-2">
-              <span className="w-1 h-6 bg-vinta-pink rounded-full"></span>
-              Latest News
-            </h3>
-            <Link
-              href="/news"
-              className="text-sm text-vinta-purple hover:text-vinta-pink transition-colors font-medium flex items-center gap-1"
-            >
-              View all <span className="text-xs">→</span>
-            </Link>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Quick Actions */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-foreground">
+                  Quick Actions
+                </h3>
+              </div>
+
+              {isAdmin ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Link href="/admin/complaints" className="group">
+                    <Card className="p-4 card-hover border-gray-100">
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-foreground">
+                            Complaints Panel
+                          </h4>
+                          <p className="text-sm text-muted-foreground truncate">
+                            Manage citizen reports
+                          </p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </div>
+                    </Card>
+                  </Link>
+                </div>
+              ) : isAdmin === false ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {quickActions.map((action, index) => {
+                    const colors = [
+                      "bg-primary/10 text-primary",
+                      "bg-pink-100 text-pink-600",
+                      "bg-amber-100 text-amber-600",
+                      "bg-cyan-100 text-cyan-600",
+                    ];
+                    const colorClass = colors[index % colors.length];
+                    const IconComponent = action.icon;
+
+                    return (
+                      <Link
+                        key={action.id}
+                        href={action.route}
+                        className="group"
+                      >
+                        <Card className="p-4 h-full card-hover border-gray-100 flex flex-col items-center text-center gap-3">
+                          <div
+                            className={`w-11 h-11 rounded-xl ${colorClass} flex items-center justify-center transition-transform group-hover:scale-110`}
+                          >
+                            <IconComponent className="w-5 h-5" />
+                          </div>
+                          <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+                            {action.title}
+                          </span>
+                        </Card>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </section>
+
+            {/* File a Report - For logged-in non-admin users */}
+            {user && isAdmin === false && (
+              <section className="fade-in delay-100">
+                <Link href="/report" className="block group">
+                  <Card className="p-4 card-hover border-gray-100 bg-gradient-to-r from-primary/5 to-transparent">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-primary text-white flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                          File a Report
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Submit a complaint to address it promptly
+                        </p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+                    </div>
+                  </Card>
+                </Link>
+              </section>
+            )}
+
+            {/* Quick Links */}
+            <section className="fade-in delay-200">
+              <div className="grid grid-cols-2 gap-3">
+                <Link href="/agencies" className="group">
+                  <Card className="p-4 card-hover border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-foreground text-sm">
+                          Agencies
+                        </h4>
+                        <p className="text-xs text-muted-foreground">
+                          Government services
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+
+                <Link href="/emergency" className="group">
+                  <Card className="p-4 card-hover border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">
+                        <Phone className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-foreground text-sm">
+                          Emergency
+                        </h4>
+                        <p className="text-xs text-muted-foreground">
+                          Hotlines & safety
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+              </div>
+            </section>
           </div>
-          <NewsList maxArticles={3} />
-        </section>
+
+          {/* Right Column - News */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-foreground">
+                Latest News
+              </h3>
+              <Link
+                href="/news"
+                className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
+              >
+                View all
+                <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            <Card className="border-gray-100 overflow-hidden">
+              <NewsList maxArticles={3} showViewAll={false} />
+            </Card>
+
+            {/* Stats Card */}
+            <Card className="p-4 border-gray-100 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-16 h-16 text-primary/5">
+                <TrendingUp className="w-full h-full" />
+              </div>
+              <h4 className="font-semibold text-foreground mb-2">
+                {isAdmin === true
+                  ? "System Overview"
+                  : user
+                  ? "Your Reports"
+                  : "Did you know?"}
+              </h4>
+              {user ? (
+                <>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    {isAdmin === true
+                      ? `${stats.total} total complaints • ${stats.solved} resolved`
+                      : stats.total > 0
+                      ? `You have ${stats.total} ${
+                          stats.total === 1 ? "complaint" : "complaints"
+                        } submitted`
+                      : "You haven't submitted any complaints yet"}
+                  </p>
+                  {stats.total > 0 && (
+                    <>
+                      <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full transition-all duration-500"
+                          style={{ width: `${stats.resolvedPercentage}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 flex justify-between text-xs">
+                        <span className="text-muted-foreground">
+                          {isAdmin === true ? "Overall Resolved" : "Your Resolved"}
+                        </span>
+                        <span className="font-semibold text-foreground">
+                          {stats.resolvedPercentage}%
+                        </span>
+                      </div>
+                      {isAdmin === true && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-3 gap-2 text-center">
+                          <div>
+                            <div className="text-xs text-muted-foreground">
+                              Pending
+                            </div>
+                            <div className="text-sm font-semibold text-amber-600">
+                              {stats.pending}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">
+                              Processing
+                            </div>
+                            <div className="text-sm font-semibold text-blue-600">
+                              {stats.processing}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">
+                              Solved
+                            </div>
+                            <div className="text-sm font-semibold text-green-600">
+                              {stats.solved}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Join our community to report issues and help improve
+                    Zamboanga City.
+                  </p>
+                  <Button
+                    className="w-full bg-primary hover:bg-primary/90 text-white"
+                    asChild
+                  >
+                    <Link href="/auth/sign-up">Get Started</Link>
+                  </Button>
+                </>
+              )}
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

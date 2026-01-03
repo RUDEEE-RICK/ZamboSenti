@@ -9,8 +9,9 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "ZamboSenti - Ez File Complaint",
-  description: "A citizen-focused web application that enables Zamboanga City residents to file complaints online quickly and securely. Report issues related to public services, infrastructure, and community concerns without visiting government offices.",
+  title: "ZamSolucion",
+  description:
+    "A citizen-focused web application that enables Zamboanga City residents to file complaints online quickly and securely. Report issues related to public services, infrastructure, and community concerns without visiting government offices.",
 };
 
 const geistSans = Geist({

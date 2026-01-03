@@ -34,6 +34,7 @@ export default function NewsDetailPage() {
     if (articleId) {
       fetchArticleDetails();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleId]);
 
   const fetchArticleDetails = async () => {
@@ -42,19 +43,18 @@ export default function NewsDetailPage() {
     setError(null);
 
     try {
-      // Fetch article
       const { data: articleData, error: articleError } = await supabase
         .from("articles")
         .select(
           `
-                    id,
-                    title,
-                    content,
-                    created_at,
-                    profiles (
-                        name
-                    )
-                `
+          id,
+          title,
+          content,
+          created_at,
+          profiles:user_id (
+            name
+          )
+        `
         )
         .eq("id", articleId)
         .is("deleted_at", null)
@@ -68,7 +68,6 @@ export default function NewsDetailPage() {
         throw new Error("Article not found");
       }
 
-      // Extract profiles (Supabase returns it as array for foreign key joins)
       const profiles = Array.isArray(articleData.profiles)
         ? articleData.profiles[0] || null
         : articleData.profiles;
@@ -78,20 +77,20 @@ export default function NewsDetailPage() {
         profiles,
       });
 
-      // Fetch images
       const { data: pictureLinks, error: pictureError } = await supabase
         .from("article_pictures")
         .select(
           `
-                    pictures (
-                        image_path
-                    )
-                `
+          pictures:picture_id (
+            image_path
+          )
+        `
         )
         .eq("article_id", articleId);
 
       if (!pictureError && pictureLinks) {
         const imageUrls = pictureLinks
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .map((link: any) => link.pictures?.image_path)
           .filter(Boolean);
         setImages(imageUrls);
@@ -106,10 +105,13 @@ export default function NewsDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Loading article...</p>
+      <div className="min-h-screen pb-24 md:pb-8">
+        <AppHeader title="News" showNotifications={false} />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>Loading article...</span>
+          </div>
         </div>
       </div>
     );
@@ -117,15 +119,15 @@ export default function NewsDetailPage() {
 
   if (error || !article) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen pb-24 md:pb-8">
         <AppHeader title="Article Not Found" showNotifications={false} />
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <Card className="border-red-200 bg-red-50 p-6">
-            <AlertCircle className="w-8 h-8 text-red-600 mb-2" />
-            <h2 className="text-lg font-bold text-red-900 mb-2">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+          <Card className="border-rose-200 bg-rose-50 p-6 text-center">
+            <AlertCircle className="w-8 h-8 text-rose-600 mx-auto mb-3" />
+            <h2 className="text-lg font-bold text-rose-900 mb-2">
               Article Not Found
             </h2>
-            <p className="text-red-700 mb-4">
+            <p className="text-sm text-rose-700 mb-4">
               {error || "The article you are looking for does not exist."}
             </p>
             <Button onClick={() => router.push("/news")} variant="outline">
@@ -138,20 +140,26 @@ export default function NewsDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen pb-24 md:pb-8">
       <AppHeader title="News" showNotifications={false} />
 
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Back Button */}
         <button
           onClick={() => router.push("/news")}
-          className="text-sm text-primary font-medium flex items-center gap-2 hover:underline"
+          className="text-sm text-muted-foreground hover:text-primary font-medium flex items-center gap-1 transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to News
+          <ArrowLeft className="w-4 h-4" />
+          Back to News
         </button>
 
-        <Card className="overflow-hidden">
-          <div className="bg-gradient-to-r from-orange-50 to-red-50 border-b p-6">
-            <h1 className="text-3xl font-bold mb-4">{article.title}</h1>
+        {/* Article Card */}
+        <Card className="overflow-hidden border-gray-100">
+          {/* Header */}
+          <div className="p-6 border-b border-gray-100">
+            <h1 className="text-2xl font-bold text-foreground mb-4">
+              {article.title}
+            </h1>
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
@@ -161,32 +169,38 @@ export default function NewsDetailPage() {
                   year: "numeric",
                 })}
               </span>
-              <span className="flex items-center gap-2">
-                <User className="w-4 h-4" />
-                By {article.profiles?.name || "Unknown"}
-              </span>
+              {article.profiles?.name && (
+                <span className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  By {article.profiles.name}
+                </span>
+              )}
             </div>
           </div>
 
+          {/* Content */}
           <div className="p-6 space-y-6">
             {/* Images */}
             {images.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 {images.map((imageUrl, index) => (
-                  <div key={index} className="relative w-full h-64">
+                  <div
+                    key={index}
+                    className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-100"
+                  >
                     <Image
                       src={imageUrl}
                       alt={`Article image ${index + 1}`}
                       fill
-                      className="object-cover rounded-lg"
+                      className="object-cover"
                     />
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Content */}
-            <div>
+            {/* Article Content */}
+            <div className="prose prose-sm max-w-none">
               <MarkdownRenderer content={article.content} />
             </div>
           </div>
