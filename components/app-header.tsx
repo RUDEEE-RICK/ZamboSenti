@@ -31,7 +31,7 @@ export function AppHeader({
   const { user } = useAuth();
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-lg border-b border-gray-100 md:hidden">
+    <header className="hidden">
       <div className="flex items-center justify-between h-14 px-4 sm:px-6 max-w-6xl mx-auto">
         {title ? (
           <h1 className="text-lg font-semibold text-foreground">{title}</h1>

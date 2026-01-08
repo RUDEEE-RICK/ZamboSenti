@@ -9,6 +9,7 @@ import {
   ClipboardList,
   ChevronRight,
   Phone,
+  BarChart3,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/logout-button";
@@ -34,11 +35,19 @@ export default async function AccountPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
-      <AppHeader title="Account" showNotifications={false} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50/30">
+      <AppHeader />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* User Profile Card */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Account</h1>
+          <p className="text-muted-foreground">
+            Manage your profile and account settings
+          </p>
+        </div>
+
+        <div className="space-y-6">        {/* User Profile Card */}
         <Card className="p-5 border-gray-100">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center flex-shrink-0">
@@ -154,6 +163,25 @@ export default async function AccountPage() {
                   </div>
                 </Card>
               </Link>
+
+              <Link href="/admin/statistics" className="block group">
+                <Card className="p-4 card-hover border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white flex items-center justify-center">
+                      <BarChart3 className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <span className="font-medium text-indigo-900 block">
+                        System Statistics
+                      </span>
+                      <p className="text-xs text-indigo-700">
+                        View analytics & insights
+                      </p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-indigo-400 group-hover:text-indigo-600 transition-colors" />
+                  </div>
+                </Card>
+              </Link>
             </div>
           </div>
         )}
@@ -172,7 +200,8 @@ export default async function AccountPage() {
             </Button>
           </Card>
         )}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

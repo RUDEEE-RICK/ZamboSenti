@@ -35,6 +35,14 @@ interface Complaint {
   admin_feedback?: string;
 }
 
+interface StatusUpdate {
+  id: string;
+  status: string;
+  remarks: string;
+  evidence_url: string | null;
+  created_at: string;
+}
+
 const STATUS_STEPS = ["pending", "processing", "solved"];
 
 const STATUS_CONFIG: Record<
@@ -51,28 +59,28 @@ const STATUS_CONFIG: Record<
     color: "text-amber-700",
     bgColor: "bg-amber-50 border-amber-200",
     icon: Clock,
-    label: "Pending Review",
+    label: "PENDING REVIEW",
     description: "Your complaint has been received and is waiting for review.",
   },
   processing: {
     color: "text-blue-700",
     bgColor: "bg-blue-50 border-blue-200",
     icon: Loader2,
-    label: "In Progress",
+    label: "IN PROGRESS",
     description: "We are currently working on resolving your issue.",
   },
   solved: {
     color: "text-emerald-700",
     bgColor: "bg-emerald-50 border-emerald-200",
     icon: CheckCircle2,
-    label: "Resolved",
+    label: "RESOLVED",
     description: "This issue has been successfully resolved.",
   },
   rejected: {
     color: "text-rose-700",
     bgColor: "bg-rose-50 border-rose-200",
     icon: XCircle,
-    label: "Rejected",
+    label: "REJECTED",
     description:
       "This complaint could not be processed. See feedback for details.",
   },
@@ -85,6 +93,7 @@ export default function ComplaintDetailPage() {
 
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [images, setImages] = useState<string[]>([]);
+  const [statusUpdates, setStatusUpdates] = useState<StatusUpdate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -128,6 +137,17 @@ export default function ComplaintDetailPage() {
         ...data,
         admin_feedback: feedbackData?.feedback || null,
       });
+
+      // Fetch status updates
+      const { data: updates } = await supabase
+        .from("complaint_status_updates")
+        .select("*")
+        .eq("complaint_id", complaintId)
+        .order("created_at", { ascending: false });
+
+      if (updates) {
+        setStatusUpdates(updates);
+      }
 
       // Collect images from both image_url and pictures table
       const imageUrls: string[] = [];
@@ -274,7 +294,7 @@ export default function ComplaintDetailPage() {
                     </div>
                     <p className="font-semibold text-foreground">
                       {complaint.barangay && `${complaint.barangay}, `}
-                      {complaint.location}
+                      ({complaint.location})
                     </p>
                   </div>
                 </div>
@@ -411,6 +431,61 @@ export default function ComplaintDetailPage() {
                   <div className="mt-4 flex items-center gap-2 text-xs text-rose-700">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Response from ZamboSenti Administration</span>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Status Updates */}
+            {statusUpdates.length > 0 && (
+              <Card className="border-gray-200 shadow-sm">
+                <div className="p-5">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">
+                    Admin Updates
+                  </h3>
+                  <div className="space-y-3">
+                    {statusUpdates.map((update) => {
+                      const config = STATUS_CONFIG[update.status] || STATUS_CONFIG.pending;
+                      const Icon = config.icon;
+                      return (
+                        <div key={update.id} className={`rounded-lg p-3 border ${config.bgColor}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Icon className={`w-4 h-4 ${config.color}`} />
+                            <span className={`text-xs font-bold uppercase ${config.color}`}>
+                              {update.status}
+                            </span>
+                          </div>
+                          {update.remarks && (
+                            <p className="text-sm text-foreground mb-2">{update.remarks}</p>
+                          )}
+                          {update.evidence_url && (
+                            <button
+                              onClick={() => setSelectedImage(update.evidence_url!)}
+                              className="relative w-32 h-20 rounded-md overflow-hidden bg-gray-100 border-2 border-gray-200 hover:border-primary transition-colors group"
+                            >
+                              <Image
+                                src={update.evidence_url}
+                                alt="Status update evidence"
+                                fill
+                                unoptimized
+                                className="object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                <span className="text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity font-medium">Click to expand</span>
+                              </div>
+                            </button>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {new Date(update.created_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </Card>

@@ -30,6 +30,47 @@ export interface NewsArticle {
   imageUrl?: string;
   publishedAt: string;
   featured?: boolean;
+  view_count?: number;
+}
+
+export interface Complaint {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  location: string;
+  barangay: string;
+  status: string;
+  user_id: string | null;
+  image_url: string | null;
+  is_anonymous: boolean;
+  is_public: boolean;
+  view_count: number;
+  guest_name: string | null;
+  guest_email: string | null;
+  guest_phone: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ComplaintReaction {
+  id: string;
+  complaint_id: string;
+  user_id: string;
+  reaction_type: 'heart' | 'like' | 'thumbs_up' | 'thumbs_down';
+  created_at: string;
+}
+
+export interface ComplaintComment {
+  id: string;
+  complaint_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  profiles?: {
+    name: string;
+  };
 }
 
 export type EmergencyCategory =

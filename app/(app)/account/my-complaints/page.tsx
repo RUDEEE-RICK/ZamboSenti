@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, type SelectOption } from "@/components/headless/Select";
 import {
   ArrowLeft,
   Loader2,
@@ -58,10 +59,28 @@ export default function MyComplaintsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string | "all">("all");
+  const [selectedCategory, setSelectedCategory] = useState<string | "all">(
+    "all"
+  );
   const [selectedStatus, setSelectedStatus] = useState<string | "all">("all");
-  const [selectedBarangay, setSelectedBarangay] = useState<string | "all">("all");
+  const [selectedBarangay, setSelectedBarangay] = useState<string | "all">(
+    "all"
+  );
   const [groupBy, setGroupBy] = useState<"none" | "barangay">("none");
+
+  // Options for Select components
+  const categoryOptions: SelectOption[] = [
+    { id: "all", name: "All Categories" },
+    ...COMPLAINT_CATEGORIES.map((cat) => ({ id: cat, name: cat })),
+  ];
+
+  const statusOptions: SelectOption[] = [
+    { id: "all", name: "All Status" },
+    { id: "pending", name: "Pending" },
+    { id: "processing", name: "Processing" },
+    { id: "solved", name: "Solved" },
+    { id: "rejected", name: "Rejected" },
+  ];
 
   const fetchUserComplaints = useCallback(async () => {
     const supabase = createClient();
@@ -74,7 +93,8 @@ export default function MyComplaintsPage() {
       } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        router.push("/auth/login");
+        // Redirect guests to login
+        router.push("/auth/login?redirect=/account/my-complaints");
         return;
       }
 
@@ -169,331 +189,394 @@ export default function MyComplaintsPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
-      <AppHeader title="My Complaints" showNotifications={false} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-red-950/20">
+      <AppHeader />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8">
         {/* Header */}
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <button
-                onClick={() => router.push("/account")}
-                className="text-sm text-muted-foreground hover:text-primary font-medium flex items-center gap-1 mb-2 transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to Account
-              </button>
-              <p className="text-sm text-muted-foreground">
-                Track the status of your submitted complaints
-              </p>
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            My Complaints
+          </h1>
+          <p className="text-muted-foreground">
+            Track the status of your submitted complaints
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <button
+                  onClick={() => router.push("/account")}
+                  className="text-sm text-muted-foreground hover:text-primary font-medium flex items-center gap-1 mb-2 transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Account
+                </button>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => router.push("/report")}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Complaint
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-3">
+
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search complaints by title, category, or location..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-11 rounded-xl border-gray-200"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Filters Row */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Category Filter */}
+              <div className="flex-1">
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Category
+                </label>
+                {/* Desktop: Buttons */}
+                <div className="hidden sm:flex flex-wrap gap-2">
+                  <Button
+                    variant={selectedCategory === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedCategory("all")}
+                    className="rounded-full h-8 text-xs"
+                  >
+                    All
+                  </Button>
+                  {COMPLAINT_CATEGORIES.map((cat) => (
+                    <Button
+                      key={cat}
+                      variant={selectedCategory === cat ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setSelectedCategory(cat)}
+                      className="rounded-full h-8 text-xs"
+                    >
+                      {cat}
+                    </Button>
+                  ))}
+                </div>
+                {/* Mobile: Dropdown */}
+                <div className="sm:hidden">
+                  <Select
+                    value={
+                      categoryOptions.find(
+                        (opt) => opt.id === selectedCategory
+                      ) || null
+                    }
+                    onChange={(option) =>
+                      setSelectedCategory(option.id as string | "all")
+                    }
+                    options={categoryOptions}
+                    placeholder="Select category"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Status and Barangay Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Status Filter */}
+              <div className="flex-1">
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Status
+                </label>
+                {/* Desktop: Buttons */}
+                <div className="hidden sm:flex flex-wrap gap-2">
+                  <Button
+                    variant={selectedStatus === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedStatus("all")}
+                    className="rounded-full h-8 text-xs"
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={
+                      selectedStatus === "pending" ? "default" : "outline"
+                    }
+                    size="sm"
+                    onClick={() => setSelectedStatus("pending")}
+                    className="rounded-full h-8 text-xs"
+                  >
+                    Pending
+                  </Button>
+                  <Button
+                    variant={
+                      selectedStatus === "processing" ? "default" : "outline"
+                    }
+                    size="sm"
+                    onClick={() => setSelectedStatus("processing")}
+                    className="rounded-full h-8 text-xs"
+                  >
+                    Processing
+                  </Button>
+                  <Button
+                    variant={
+                      selectedStatus === "solved" ? "default" : "outline"
+                    }
+                    size="sm"
+                    onClick={() => setSelectedStatus("solved")}
+                    className="rounded-full h-8 text-xs"
+                  >
+                    Solved
+                  </Button>
+                  <Button
+                    variant={
+                      selectedStatus === "rejected" ? "default" : "outline"
+                    }
+                    size="sm"
+                    onClick={() => setSelectedStatus("rejected")}
+                    className="rounded-full h-8 text-xs"
+                  >
+                    Rejected
+                  </Button>
+                </div>
+                {/* Mobile: Dropdown */}
+                <div className="sm:hidden">
+                  <Select
+                    value={
+                      statusOptions.find((opt) => opt.id === selectedStatus) ||
+                      null
+                    }
+                    onChange={(option) =>
+                      setSelectedStatus(option.id as string | "all")
+                    }
+                    options={statusOptions}
+                    placeholder="Select status"
+                  />
+                </div>
+              </div>
+
+              {/* Barangay Filter */}
+              <div className="flex-1">
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Barangay
+                </label>
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <select
+                    value={selectedBarangay}
+                    onChange={(e) => setSelectedBarangay(e.target.value)}
+                    className="w-full h-9 pl-10 pr-4 rounded-full border border-gray-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none cursor-pointer"
+                  >
+                    <option value="all">All Barangays</option>
+                    {BARANGAYS.map((b) => (
+                      <option key={b.id} value={b.name}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Group By Toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Group by:
+                </span>
+                <Button
+                  variant={groupBy === "none" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setGroupBy("none")}
+                  className="rounded-full h-7 text-xs"
+                >
+                  None
+                </Button>
+                <Button
+                  variant={groupBy === "barangay" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setGroupBy("barangay")}
+                  className="rounded-full h-7 text-xs"
+                >
+                  Barangay
+                </Button>
+              </div>
+              {(searchQuery ||
+                selectedCategory !== "all" ||
+                selectedStatus !== "all" ||
+                selectedBarangay !== "all") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedCategory("all");
+                    setSelectedStatus("all");
+                    setSelectedBarangay("all");
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <Card className="border-rose-200 bg-rose-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                <p className="text-sm text-rose-700">{error}</p>
+              </div>
+            </Card>
+          )}
+
+          {/* Complaints List */}
+          {complaints.length === 0 ? (
+            <Card className="p-12 text-center border-gray-100">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">
+                No complaints found
+              </h3>
+              <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+                You haven&apos;t submitted any complaints yet. If you notice an
+                issue, please report it.
+              </p>
               <Button
                 onClick={() => router.push("/report")}
                 className="bg-primary hover:bg-primary/90"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                New Complaint
+                Submit a Report
               </Button>
-            </div>
-          </div>
-
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search complaints by title, category, or location..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-11 rounded-xl border-gray-200"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Filters Row */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Category Filter */}
-            <div className="flex-1">
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Category
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={selectedCategory === "all" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedCategory("all")}
-                  className="rounded-full h-8 text-xs"
-                >
-                  All
-                </Button>
-                {COMPLAINT_CATEGORIES.map((cat) => (
-                  <Button
-                    key={cat}
-                    variant={selectedCategory === cat ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedCategory(cat)}
-                    className="rounded-full h-8 text-xs"
-                  >
-                    {cat}
-                  </Button>
-                ))}
+            </Card>
+          ) : filteredComplaints.length === 0 ? (
+            <Card className="p-12 text-center border-gray-100">
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-6 h-6 text-muted-foreground" />
               </div>
-            </div>
-          </div>
-
-          {/* Status and Barangay Filters */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Status Filter */}
-            <div className="flex-1">
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Status
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={selectedStatus === "all" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedStatus("all")}
-                  className="rounded-full h-8 text-xs"
-                >
-                  All
-                </Button>
-                <Button
-                  variant={selectedStatus === "pending" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedStatus("pending")}
-                  className="rounded-full h-8 text-xs"
-                >
-                  Pending
-                </Button>
-                <Button
-                  variant={selectedStatus === "processing" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedStatus("processing")}
-                  className="rounded-full h-8 text-xs"
-                >
-                  Processing
-                </Button>
-                <Button
-                  variant={selectedStatus === "solved" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedStatus("solved")}
-                  className="rounded-full h-8 text-xs"
-                >
-                  Solved
-                </Button>
-                <Button
-                  variant={selectedStatus === "rejected" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedStatus("rejected")}
-                  className="rounded-full h-8 text-xs"
-                >
-                  Rejected
-                </Button>
-              </div>
-            </div>
-
-            {/* Barangay Filter */}
-            <div className="flex-1">
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Barangay
-              </label>
-              <div className="relative">
-                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <select
-                  value={selectedBarangay}
-                  onChange={(e) => setSelectedBarangay(e.target.value)}
-                  className="w-full h-9 pl-10 pr-4 rounded-full border border-gray-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none cursor-pointer"
-                >
-                  <option value="all">All Barangays</option>
-                  {BARANGAYS.map((b) => (
-                    <option key={b.id} value={b.name}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Group By Toggle */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Group by:</span>
+              <h3 className="font-semibold mb-1">
+                No complaints match your filters
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Try adjusting your search or filter criteria.
+              </p>
               <Button
-                variant={groupBy === "none" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setGroupBy("none")}
-                className="rounded-full h-7 text-xs"
-              >
-                None
-              </Button>
-              <Button
-                variant={groupBy === "barangay" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setGroupBy("barangay")}
-                className="rounded-full h-7 text-xs"
-              >
-                Barangay
-              </Button>
-            </div>
-            {(searchQuery || selectedCategory !== "all" || selectedStatus !== "all" || selectedBarangay !== "all") && (
-              <Button
-                variant="ghost"
-                size="sm"
+                variant="outline"
                 onClick={() => {
                   setSearchQuery("");
                   setSelectedCategory("all");
                   setSelectedStatus("all");
                   setSelectedBarangay("all");
                 }}
-                className="text-xs text-muted-foreground hover:text-foreground"
               >
                 Clear filters
               </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <Card className="border-rose-200 bg-rose-50 p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
-              <p className="text-sm text-rose-700">{error}</p>
-            </div>
-          </Card>
-        )}
-
-        {/* Complaints List */}
-        {complaints.length === 0 ? (
-          <Card className="p-12 text-center border-gray-100">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-8 h-8 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">No complaints found</h3>
-            <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-              You haven&apos;t submitted any complaints yet. If you notice an
-              issue, please report it.
-            </p>
-            <Button
-              onClick={() => router.push("/report")}
-              className="bg-primary hover:bg-primary/90"
-            >
-              Submit a Report
-            </Button>
-          </Card>
-        ) : filteredComplaints.length === 0 ? (
-          <Card className="p-12 text-center border-gray-100">
-            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <h3 className="font-semibold mb-1">No complaints match your filters</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Try adjusting your search or filter criteria.
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedCategory("all");
-                setSelectedStatus("all");
-                setSelectedBarangay("all");
-              }}
-            >
-              Clear filters
-            </Button>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {Object.entries(groupedComplaints).map(([groupKey, groupComplaints]) => (
-              <div key={groupKey} className="space-y-3">
-                {/* Group Header */}
-                {groupBy === "barangay" && (
-                  <div className="flex items-center gap-3 px-1">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-primary" />
-                      <h2 className="font-semibold text-sm text-foreground">
-                        {groupKey}
-                      </h2>
-                    </div>
-                    <div className="h-px flex-1 bg-gray-200" />
-                    <span className="text-xs text-muted-foreground">
-                      {groupComplaints.length} {groupComplaints.length === 1 ? "complaint" : "complaints"}
-                    </span>
-                  </div>
-                )}
-
-                {/* Complaint Cards */}
-                {groupComplaints.map((complaint) => (
-                  <Card
-                    key={complaint.id}
-                    className="p-4 card-hover border-gray-100 cursor-pointer transition-all hover:shadow-md"
-                    onClick={() =>
-                      router.push(`/account/my-complaints/${complaint.id}`)
-                    }
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="font-medium text-foreground">
-                            {complaint.title}
-                          </h3>
-                          <Badge
-                            className={`${getStatusStyles(
-                              complaint.status
-                            )} text-xs capitalize`}
-                          >
-                            {complaint.status}
-                          </Badge>
-                          {complaint.is_anonymous && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                              Anonymous
-                            </span>
-                          )}
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(groupedComplaints).map(
+                ([groupKey, groupComplaints]) => (
+                  <div key={groupKey} className="space-y-3">
+                    {/* Group Header */}
+                    {groupBy === "barangay" && (
+                      <div className="flex items-center gap-3 px-1">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-primary" />
+                          <h2 className="font-semibold text-sm text-foreground">
+                            {groupKey}
+                          </h2>
                         </div>
-
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                          <span className="bg-gray-100 px-2 py-0.5 rounded">
-                            {complaint.category}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {complaint.location}
-                          </span>
-                          {complaint.barangay && groupBy !== "barangay" && (
-                            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded">
-                              {complaint.barangay}
-                            </span>
-                          )}
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(complaint.created_at).toLocaleDateString(
-                              "en-US",
-                              { month: "short", day: "numeric", year: "numeric" }
-                            )}
-                          </span>
-                        </div>
+                        <div className="h-px flex-1 bg-gray-200" />
+                        <span className="text-xs text-muted-foreground">
+                          {groupComplaints.length}{" "}
+                          {groupComplaints.length === 1
+                            ? "complaint"
+                            : "complaints"}
+                        </span>
                       </div>
+                    )}
 
-                      <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                    {/* Complaint Cards */}
+                    {groupComplaints.map((complaint) => (
+                      <Card
+                        key={complaint.id}
+                        className="p-4 card-hover border-gray-100 cursor-pointer transition-all hover:shadow-md"
+                        onClick={() =>
+                          router.push(`/account/my-complaints/${complaint.id}`)
+                        }
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h3 className="font-medium text-foreground">
+                                {complaint.title}
+                              </h3>
+                              <Badge
+                                className={`${getStatusStyles(
+                                  complaint.status
+                                )} text-xs uppercase`}
+                              >
+                                {complaint.status}
+                              </Badge>
+                              {complaint.is_anonymous && (
+                                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                                  Anonymous
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                              <span className="bg-gray-100 px-2 py-0.5 rounded">
+                                {complaint.category}
+                              </span>
+
+                              {complaint.barangay && groupBy !== "barangay" && (
+                                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {complaint.barangay}
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {new Date(
+                                  complaint.created_at
+                                ).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </div>
+                          </div>
+
+                          <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

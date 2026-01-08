@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Expand,
   ArrowLeftToLine,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -40,14 +41,14 @@ const sidebarItems = [
     icon: Home,
   },
   {
+    title: "Hub",
+    href: "/news",
+    icon: Users,
+  },
+  {
     title: "Agencies",
     href: "/agencies",
     icon: Building2,
-  },
-  {
-    title: "News",
-    href: "/news",
-    icon: Newspaper,
   },
   {
     title: "Emergency",

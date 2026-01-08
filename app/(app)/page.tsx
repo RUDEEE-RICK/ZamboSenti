@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { getGreeting } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { NewsList } from "@/components/news-list";
+import { AppHeader } from "@/components/app-header";
 
 export default function HomePage() {
   const { user, loading } = useAuth();
@@ -121,13 +122,11 @@ export default function HomePage() {
   }, [user, loading]);
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
-      {/* Mobile Header */}
-      <div className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-lg border-b border-gray-100 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-gradient">ZamSolucion</h1>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-red-950/20">
+      {/* Mobile Header - Only visible on mobile */}
+      <div className="md:hidden sticky top-0 z-40 bg-white/95 backdrop-blur-lg border-b border-gray-100">
+        <div className="flex items-center justify-between px-4 py-3">
+          <h1 className="text-lg font-bold text-gradient">ZamSolucion</h1>
           <div className="flex items-center gap-1.5 bg-primary/5 px-2.5 py-1.5 rounded-full border border-primary/10">
             <MapPin className="w-3 h-3 text-primary" />
             <span className="text-xs font-semibold text-primary">
@@ -137,13 +136,12 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Desktop Header */}
+      {/* Desktop Header with Location */}
       <div className="hidden md:block sticky top-0 z-30 bg-white/95 backdrop-blur-lg border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gradient">ZamSolucion</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <h1 className="text-2xl font-bold text-gradient">Home</h1>             <p className="text-sm text-muted-foreground mt-0.5">
                 {loading ? "Welcome" : getGreeting()}
                 {user && user.user_metadata?.name
                   ? `, ${user.user_metadata.name.split(" ")[0]}`
@@ -168,8 +166,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:space-y-8 space-y-4">
-        {/* Hero Section - Only for non-logged-in users */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-8 lg:space-y-8 space-y-4">        {/* Hero Section - Only for non-logged-in users */}
         {showHero && (
           <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary via-primary/90 to-primary/80 text-white fade-in">
             <div className="p-6 md:p-10 relative">
@@ -236,6 +233,24 @@ export default function HomePage() {
                       </div>
                     </Card>
                   </Link>
+                  <Link href="/admin/statistics" className="group">
+                    <Card className="p-4 card-hover border-gray-100">
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-foreground">
+                            Statistics
+                          </h4>
+                          <p className="text-sm text-muted-foreground truncate">
+                            View analytics & reports
+                          </p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </div>
+                    </Card>
+                  </Link>
                 </div>
               ) : isAdmin === false ? (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -272,8 +287,8 @@ export default function HomePage() {
               ) : null}
             </section>
 
-            {/* File a Report - For logged-in non-admin users */}
-            {user && isAdmin === false && (
+            {/* File a Report - For logged-in non-admin users and guests */}
+            {isAdmin === false && (
               <section className="fade-in delay-100">
                 <Link href="/report" className="block group">
                   <Card className="p-4 card-hover border-gray-100 bg-gradient-to-r from-primary/5 to-transparent">
@@ -286,7 +301,7 @@ export default function HomePage() {
                           File a Report
                         </h3>
                         <p className="text-sm text-muted-foreground">
-                          Submit a complaint to address it promptly
+                          {user ? "Submit a complaint to address it promptly" : "Report an issue (no login required)"}
                         </p>
                       </div>
                       <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
@@ -444,7 +459,7 @@ export default function HomePage() {
             </Card>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

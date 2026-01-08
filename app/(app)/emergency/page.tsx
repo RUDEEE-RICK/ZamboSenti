@@ -20,6 +20,7 @@ import {
   CloudLightning,
   Zap,
   HelpCircle,
+  PhoneCall,
 } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,7 @@ const CATEGORY_CONFIG: Record<
   fire: {
     label: "Fire",
     icon: Flame,
-    color: "bg-red-100 text-red-600",
+    color: "bg-red-900 text-white",
   },
   medical: {
     label: "Medical",
@@ -347,15 +348,48 @@ export default function EmergencyPage() {
   };
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
-      <AppHeader title="Emergency" showNotifications={false} />
+    <div className="min-h-screen">
+      <AppHeader />
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Emergency Hotlines</h1>
+          <p className="text-muted-foreground">
+            Quick access to emergency contacts in Zamboanga City
+          </p>
+        </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        <div className="space-y-6">
+        {/* Emergency Hotline 117 - Fixed at top */}
+        <Card className="bg-gradient-to-br from-red-600 to-red-700 text-white border-0 shadow-xl">
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 rounded-full p-4">
+                  <PhoneCall className="w-8 h-8" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold mb-1">Emergency Hotline</h2>
+                  <p className="text-white/90 text-sm">Zamboanga City - Available 24/7</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-5xl font-bold mb-2">117</div>
+                <Button
+                  onClick={() => handleCallNumber("117")}
+                  className="bg-white text-red-600 hover:bg-white/90 font-semibold"
+                  size="lg"
+                >
+                  <Phone className="w-4 h-4 mr-2" />
+                  Call Now
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         {/* Header with Admin Button */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            Emergency hotlines for Zamboanga City
-          </p>
           {isAdmin && (
             <Button
               onClick={() => setShowForm(true)}
@@ -685,7 +719,8 @@ export default function EmergencyPage() {
             })}
           </div>
         )}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

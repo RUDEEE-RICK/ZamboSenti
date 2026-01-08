@@ -272,15 +272,20 @@ export default function AgenciesPage() {
   }, {} as Record<AgencyCategory, Agency[]>);
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
-      <AppHeader title="Government Agencies" showNotifications={false} />
+    <div className="min-h-screen">
+      <AppHeader />
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Government Agencies</h1>
+          <p className="text-muted-foreground">
+            Directory of government agencies and services in Zamboanga City
+          </p>
+        </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div className="space-y-4">
         {/* Page Description */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            Quick access to official government agency websites and services.
-          </p>
           {isAdmin && (
             <Button
               onClick={() => setShowForm(true)}
@@ -562,7 +567,8 @@ export default function AgenciesPage() {
             )}
           </div>
         )}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

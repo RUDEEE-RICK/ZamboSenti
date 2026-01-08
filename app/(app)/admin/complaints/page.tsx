@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/app-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, type SelectOption } from "@/components/headless/Select";
 import {
   ArrowLeft,
   AlertCircle,
@@ -34,6 +35,9 @@ interface Complaint {
   created_at: string;
   user_id: string;
   is_anonymous: boolean;
+  guest_name: string | null;
+  guest_phone: string | null;
+  guest_email: string | null;
   profiles: {
     name: string;
   };
@@ -72,6 +76,20 @@ export default function AdminComplaintsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | "all">("all");
   const [selectedStatus, setSelectedStatus] = useState<string | "all">("all");
   const [groupBy, setGroupBy] = useState<"none" | "barangay">("none");
+
+  // Options for Select components
+  const categoryOptions: SelectOption[] = [
+    { id: "all", name: "All Categories" },
+    ...COMPLAINT_CATEGORIES.map(cat => ({ id: cat, name: cat }))
+  ];
+
+  const statusOptions: SelectOption[] = [
+    { id: "all", name: "All Status" },
+    { id: "pending", name: "Pending" },
+    { id: "processing", name: "Processing" },
+    { id: "solved", name: "Solved" },
+    { id: "rejected", name: "Rejected" }
+  ];
 
   const checkAdminAndFetchComplaints = useCallback(async () => {
     const supabase = createClient();
@@ -122,7 +140,7 @@ export default function AdminComplaintsPage() {
       const { data: complaintsData, error: fetchError } = await supabase
         .from("complaints")
         .select(
-          "id, title, content, category, location, barangay, status, created_at, user_id, is_anonymous"
+          "id, title, content, category, location, barangay, status, created_at, user_id, is_anonymous, guest_name, guest_phone, guest_email"
         )
         .order("created_at", { ascending: false });
 
@@ -135,7 +153,7 @@ export default function AdminComplaintsPage() {
         return;
       }
 
-      const userIds = [...new Set(complaintsData.map((c) => c.user_id))];
+      const userIds = [...new Set(complaintsData.map((c) => c.user_id).filter((id): id is string => id !== null))];
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("id, name")
@@ -239,10 +257,19 @@ export default function AdminComplaintsPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
-      <AppHeader title="Complaints Management" showNotifications={false} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-red-950/20">
+      <AppHeader />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Complaints Management</h1>
+          <p className="text-muted-foreground">
+            Monitor and manage all citizen complaints
+          </p>
+        </div>
+
+        <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -254,9 +281,6 @@ export default function AdminComplaintsPage() {
                 <ArrowLeft className="w-4 h-4" />
                 Back to Account
               </button>
-              <p className="text-sm text-muted-foreground">
-                Monitor and manage all citizen complaints
-              </p>
             </div>
 
             <div className="flex gap-3">
@@ -304,7 +328,8 @@ export default function AdminComplaintsPage() {
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
               Category
             </label>
-            <div className="flex flex-wrap gap-2">
+            {/* Desktop: Buttons */}
+            <div className="hidden sm:flex flex-wrap gap-2">
               <Button
                 variant={selectedCategory === "all" ? "default" : "outline"}
                 size="sm"
@@ -325,6 +350,15 @@ export default function AdminComplaintsPage() {
                 </Button>
               ))}
             </div>
+            {/* Mobile: Dropdown */}
+            <div className="sm:hidden">
+              <Select
+                value={categoryOptions.find(opt => opt.id === selectedCategory) || null}
+                onChange={(option) => setSelectedCategory(option.id as string | "all")}
+                options={categoryOptions}
+                placeholder="Select category"
+              />
+            </div>
           </div>
 
           {/* Status and Barangay Filters */}
@@ -334,7 +368,8 @@ export default function AdminComplaintsPage() {
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                 Status
               </label>
-              <div className="flex flex-wrap gap-2">
+              {/* Desktop: Buttons */}
+              <div className="hidden sm:flex flex-wrap gap-2">
                 <Button
                   variant={selectedStatus === "all" ? "default" : "outline"}
                   size="sm"
@@ -375,6 +410,15 @@ export default function AdminComplaintsPage() {
                 >
                   Rejected
                 </Button>
+              </div>
+              {/* Mobile: Dropdown */}
+              <div className="sm:hidden">
+                <Select
+                  value={statusOptions.find(opt => opt.id === selectedStatus) || null}
+                  onChange={(option) => setSelectedStatus(option.id as string | "all")}
+                  options={statusOptions}
+                  placeholder="Select status"
+                />
               </div>
             </div>
 
@@ -517,7 +561,7 @@ export default function AdminComplaintsPage() {
                           <Badge
                             className={`${getStatusStyles(
                               complaint.status
-                            )} text-xs`}
+                            )} text-xs uppercase`}
                           >
                             {complaint.status}
                           </Badge>
@@ -529,12 +573,9 @@ export default function AdminComplaintsPage() {
                           <span className="bg-gray-100 px-2 py-0.5 rounded">
                             {complaint.category}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {complaint.location}
-                          </span>
                           {complaint.barangay && groupBy !== "barangay" && (
-                            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded">
+                            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
                               {complaint.barangay}
                             </span>
                           )}
@@ -551,8 +592,14 @@ export default function AdminComplaintsPage() {
                               <span className="inline-flex items-center gap-1 text-amber-600">
                                 Anonymous
                               </span>
+                            ) : complaint.guest_name ? (
+                              <span className="inline-flex items-center gap-1 text-purple-600">
+                                {complaint.guest_name} (Guest)
+                              </span>
                             ) : (
-                              complaint.profiles?.name || "Unknown"
+                              <span className="inline-flex items-center gap-1 text-red-600">
+                                {complaint.profiles?.name || "Unknown"} 
+                              </span>
                             )}
                           </span>
                         </div>
@@ -575,7 +622,8 @@ export default function AdminComplaintsPage() {
             ))}
           </div>
         )}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

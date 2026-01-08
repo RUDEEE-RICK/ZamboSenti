@@ -57,6 +57,7 @@ export async function updateSession(request: NextRequest) {
     '/emergency',
     '/account',
     '/services',
+    '/report', // Allow guests to submit complaints
   ];
 
   const isPublicRoute = publicRoutes.some(route => 

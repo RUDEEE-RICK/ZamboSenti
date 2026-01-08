@@ -186,10 +186,19 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
-      <AppHeader title="Settings" showNotifications={false} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50/30">
+      <AppHeader />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
+          <p className="text-muted-foreground">
+            Manage your account settings and preferences
+          </p>
+        </div>
+
+        <div className="space-y-6">
         {/* Back Button */}
         <button
           onClick={() => router.push("/account")}
@@ -497,7 +506,8 @@ export default function SettingsPage() {
             </Card>
           </div>
         </div>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

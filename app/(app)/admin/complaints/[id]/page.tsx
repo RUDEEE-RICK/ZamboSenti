@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/headless/Input";
 import {
   ArrowLeft,
   AlertCircle,
@@ -40,6 +41,9 @@ interface Complaint {
   user_id: string;
   image_url?: string;
   is_anonymous?: boolean;
+  guest_name?: string | null;
+  guest_phone?: string | null;
+  guest_email?: string | null;
   profiles: {
     address: string;
     name: string;
@@ -48,9 +52,11 @@ interface Complaint {
   };
 }
 
-interface Feedback {
+interface StatusUpdate {
   id: string;
-  feedback: string;
+  status: string;
+  remarks: string;
+  evidence_url: string | null;
   created_at: string;
   admin_id: string;
 }
@@ -124,9 +130,10 @@ export default function ComplaintDetailPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [images, setImages] = useState<string[]>([]);
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [feedbackText, setFeedbackText] = useState("");
-  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [statusUpdates, setStatusUpdates] = useState<Record<string, StatusUpdate>>({});
+  const [activeStatusForm, setActiveStatusForm] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ remarks: "", evidence: null as File | null });
+  const [submitting, setSubmitting] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const checkAdminAndFetchComplaint = useCallback(async () => {
@@ -179,7 +186,7 @@ export default function ComplaintDetailPage() {
       const { data: complaintData, error: fetchError } = await supabase
         .from("complaints")
         .select(
-          "id, title, content, category, location, barangay, status, created_at, updated_at, user_id, image_url, is_anonymous"
+          "id, title, content, category, location, barangay, status, created_at, updated_at, user_id, image_url, is_anonymous, guest_name, guest_phone, guest_email"
         )
         .eq("id", complaintId)
         .single();
@@ -192,43 +199,24 @@ export default function ComplaintDetailPage() {
         throw new Error("Complaint not found");
       }
 
-      console.log("🔍 Complaint Data:", {
-        id: complaintData.id,
-        user_id: complaintData.user_id,
-        is_anonymous: complaintData.is_anonymous,
-        title: complaintData.title
-      });
-
-      // Fetch profile data separately with proper error handling
-      // Using the same approach as the list page that works correctly
+      // Fetch profile data if not anonymous and not guest
       let profileData = null;
+      let userEmail = null;
       
-      if (!complaintData.is_anonymous) {
-        console.log("📞 Fetching profile for user_id:", complaintData.user_id);
-        
-        // Use .in() instead of .eq().single() to match the working list page approach
-        // Note: Removed email from query - it doesn't exist in profiles table
-        const { data: profilesArray, error: profileError } = await supabase
+      if (!complaintData.is_anonymous && !complaintData.guest_name && complaintData.user_id) {
+        const { data: profile } = await supabase
           .from("profiles")
           .select("id, name, contact_number, address")
-          .in("id", [complaintData.user_id]);
+          .eq("id", complaintData.user_id)
+          .single();
 
-        if (profileError) {
-          console.error("❌ Error fetching profile:", {
-            message: profileError.message,
-            details: profileError.details,
-            hint: profileError.hint,
-            code: profileError.code,
-          });
-        } else {
-          console.log("✅ Profiles fetched - Count:", profilesArray?.length);
-          console.log("✅ Profiles array:", profilesArray);
-          // Get the first (and should be only) profile from the array
-          profileData = profilesArray && profilesArray.length > 0 ? profilesArray[0] : null;
-          console.log("✅ Final profile data:", profileData);
-        }
-      } else {
-        console.log("⚠️ Complaint is anonymous, skipping profile fetch");
+        profileData = profile;
+
+        // Fetch email using RPC function
+        const { data: emailData } = await supabase
+          .rpc('get_user_email', { user_uuid: complaintData.user_id });
+        
+        userEmail = emailData || null;
       }
 
       const combinedData: Complaint = {
@@ -236,30 +224,25 @@ export default function ComplaintDetailPage() {
         profiles: complaintData.is_anonymous
           ? {
               name: "Anonymous",
-              email: "Anonymous",
+              email: "",
               contact_number: "",
               address: "",
             }
-          : profileData
+          : complaintData.guest_name
           ? {
-              name: profileData.name || "No Name Set",
-              email: "N/A", // Email not in profiles table
-              contact_number: profileData.contact_number || "",
-              address: profileData.address || "",
+              name: complaintData.guest_name + " (Guest)",
+              email: complaintData.guest_email || "",
+              contact_number: complaintData.guest_phone || "",
+              address: "",
             }
           : {
-              name: "Unknown User",
-              email: "N/A",
-              contact_number: "",
-              address: "",
+              name: profileData?.name || "Unknown User",
+              email: userEmail || "",
+              contact_number: profileData?.contact_number || "",
+              address: profileData?.address || "",
             },
       };
 
-      console.log("📋 Final complaint data:", {
-        is_anonymous: combinedData.is_anonymous,
-        user_id: combinedData.user_id,
-        profile_name: combinedData.profiles?.name,
-      });
       setComplaint(combinedData);
 
       // Collect images from both image_url field and pictures table
@@ -273,20 +256,21 @@ export default function ComplaintDetailPage() {
       // Remove duplicates
       setImages([...new Set(imageUrls)]);
 
-      // Fetch feedback if status is rejected
-      if (complaintData.status === "rejected") {
-        const { data: feedbackData } = await supabase
-          .from("complaint_feedback")
-          .select("id, feedback, created_at, admin_id")
-          .eq("complaint_id", complaintId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+      // Fetch all status updates
+      const { data: updates } = await supabase
+        .from("complaint_status_updates")
+        .select("*")
+        .eq("complaint_id", complaintId)
+        .order("created_at", { ascending: false });
 
-        if (feedbackData) {
-          setFeedback(feedbackData);
-          setFeedbackText(feedbackData.feedback);
-        }
+      if (updates) {
+        const updatesMap: Record<string, StatusUpdate> = {};
+        updates.forEach((update) => {
+          if (!updatesMap[update.status]) {
+            updatesMap[update.status] = update;
+          }
+        });
+        setStatusUpdates(updatesMap);
       }
     } catch (err) {
       console.error("Error fetching complaint:", err);
@@ -300,32 +284,30 @@ export default function ComplaintDetailPage() {
 
   const updateComplaintStatus = async (newStatus: string) => {
     if (!complaint) return;
-
-    const supabase = createClient();
     setUpdatingStatus(true);
     setError(null);
 
     try {
+      const supabase = createClient();
       const { error: updateError } = await supabase
         .from("complaints")
         .update({ status: newStatus, updated_at: new Date().toISOString() })
         .eq("id", complaint.id);
 
-      if (updateError) {
-        throw new Error(updateError.message);
-      }
+      if (updateError) throw new Error(updateError.message);
 
       setComplaint({ ...complaint, status: newStatus });
-
-      // If status is being changed from rejected to something else, clear feedback
-      if (complaint.status === "rejected" && newStatus !== "rejected") {
-        setFeedback(null);
-        setFeedbackText("");
-      }
-
-      // If changing to rejected status, allow feedback to be added
-      if (newStatus === "rejected") {
-        setFeedbackText("");
+      setActiveStatusForm(newStatus);
+      
+      // Load existing remarks/evidence if available
+      const existing = statusUpdates[newStatus];
+      if (existing) {
+        setFormData({
+          remarks: existing.remarks || "",
+          evidence: null,
+        });
+      } else {
+        setFormData({ remarks: "", evidence: null });
       }
     } catch (err) {
       console.error("Error updating complaint status:", err);
@@ -335,59 +317,61 @@ export default function ComplaintDetailPage() {
     }
   };
 
-  const submitFeedback = async () => {
-    if (!complaint || !feedbackText.trim()) {
-      setError("Please provide feedback text");
-      return;
-    }
+  const submitStatusUpdate = async () => {
+    if (!complaint || !activeStatusForm) return;
 
-    const supabase = createClient();
-    setSubmittingFeedback(true);
+    setSubmitting(true);
     setError(null);
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
 
-      if (!user) {
-        throw new Error("User not authenticated");
+      let evidenceUrl = statusUpdates[activeStatusForm]?.evidence_url || null;
+
+      // Upload evidence if provided
+      if (formData.evidence) {
+        const fileExt = formData.evidence.name.split(".").pop();
+        const fileName = `${complaint.id}-${activeStatusForm}-${Date.now()}.${fileExt}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("complaint-images")
+          .upload(fileName, formData.evidence, {
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        evidenceUrl = supabase.storage
+          .from("complaint-images")
+          .getPublicUrl(uploadData.path).data.publicUrl;
+        
+        console.log("✅ Evidence URL:", evidenceUrl);
       }
 
-      // Check if feedback already exists
-      if (feedback) {
-        // Update existing feedback
-        const { error: updateError } = await supabase
-          .from("complaint_feedback")
-          .update({ feedback: feedbackText })
-          .eq("id", feedback.id);
+      // Upsert status update
+      const { data, error } = await supabase
+        .from("complaint_status_updates")
+        .upsert({
+          complaint_id: complaint.id,
+          status: activeStatusForm,
+          remarks: formData.remarks || null,
+          evidence_url: evidenceUrl,
+          admin_id: user.id,
+        }, { onConflict: "complaint_id,status" })
+        .select()
+        .single();
 
-        if (updateError) throw updateError;
+      if (error) throw error;
 
-        setFeedback({ ...feedback, feedback: feedbackText });
-      } else {
-        // Insert new feedback
-        const { data: newFeedback, error: insertError } = await supabase
-          .from("complaint_feedback")
-          .insert({
-            complaint_id: complaint.id,
-            feedback: feedbackText,
-            admin_id: user.id,
-          })
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-
-        setFeedback(newFeedback);
-      }
+      setStatusUpdates({ ...statusUpdates, [activeStatusForm]: data });
+      setActiveStatusForm(null);
+      setFormData({ remarks: "", evidence: null });
     } catch (err) {
-      console.error("Error submitting feedback:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to submit feedback"
-      );
+      console.error("Error submitting status update:", err);
+      setError(err instanceof Error ? err.message : "Failed to submit update");
     } finally {
-      setSubmittingFeedback(false);
+      setSubmitting(false);
     }
   };
 
@@ -499,13 +483,29 @@ export default function ComplaintDetailPage() {
                         <User className="w-4 h-4" />
                         {complaint.is_anonymous 
                           ? "Anonymous" 
+                          : complaint.guest_name
+                          ? complaint.guest_name + " (Guest)"
                           : (complaint.profiles?.name || "Unknown User")}
                       </span>
+                      {!complaint.is_anonymous && complaint.profiles?.email && (
+                        <a 
+                          href={`mailto:${complaint.profiles.email}`}
+                          className="flex items-center gap-1.5 hover:text-primary transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Mail className="w-4 h-4" />
+                          {complaint.profiles.email}
+                        </a>
+                      )}
                       {!complaint.is_anonymous && complaint.profiles?.contact_number && (
-                        <span className="flex items-center gap-1.5">
+                        <a 
+                          href={`tel:${complaint.profiles.contact_number}`}
+                          className="flex items-center gap-1.5 hover:text-primary transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Phone className="w-4 h-4" />
                           {complaint.profiles.contact_number}
-                        </span>
+                        </a>
                       )}
                     </div>
                     {!complaint.is_anonymous && complaint.profiles?.address && (
@@ -518,9 +518,9 @@ export default function ComplaintDetailPage() {
                   <Badge
                     className={`${getStatusBadgeStyles(
                       complaint.status
-                    )} capitalize text-sm px-3 py-1`}
+                    )} text-sm px-3 py-1`}
                   >
-                    {complaint.status}
+                    {complaint.status.toUpperCase()}
                   </Badge>
                 </div>
 
@@ -563,7 +563,7 @@ export default function ComplaintDetailPage() {
                   </div>
                   <p className="font-semibold text-foreground">
                     {complaint.barangay && `${complaint.barangay} `}
-                    {complaint.location}
+                    ({complaint.location})
                   </p>
                 </div>
                 </div>
@@ -625,86 +625,155 @@ export default function ComplaintDetailPage() {
                 <div className="space-y-3">
                   {STATUS_OPTIONS.map((statusOption) => {
                     const isActive = complaint.status === statusOption.value;
+                    const hasUpdate = statusUpdates[statusOption.value];
                     const Icon = statusOption.icon;
 
                     return (
-                      <Button
-                        key={statusOption.value}
-                        variant={isActive ? "default" : "outline"}
-                        disabled={updatingStatus || isActive}
-                        onClick={() => updateComplaintStatus(statusOption.value)}
-                        className={`w-full h-auto py-4 flex items-start gap-3 ${
-                          !isActive && getStatusStyles(statusOption.value, false)
-                        } ${isActive ? "ring-2 ring-primary ring-offset-2" : ""}`}
-                      >
-                        <Icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${statusOption.value === "processing" && updatingStatus ? "animate-spin" : ""}`} />
-                        <div className="flex-1 text-left">
-                          <div className="font-semibold text-sm">
-                            {statusOption.label}
-                          </div>
-                          <div className={`text-xs mt-0.5 ${isActive ? "text-white/80" : "text-muted-foreground"}`}>
-                            {statusOption.description}
-                          </div>
-                          {isActive && (
-                            <div className="text-xs mt-1 font-medium">
-                              ✓ Current Status
+                      <div key={statusOption.value}>
+                        <Button
+                          variant={isActive ? "default" : "outline"}
+                          disabled={updatingStatus}
+                          onClick={() => {
+                            if (isActive && !activeStatusForm) {
+                              setActiveStatusForm(statusOption.value);
+                              setFormData({
+                                remarks: hasUpdate?.remarks || "",
+                                evidence: null,
+                              });
+                            } else if (!isActive) {
+                              updateComplaintStatus(statusOption.value);
+                            }
+                          }}
+                          className={`w-full h-auto py-4 flex items-start gap-3 ${
+                            isActive ? getStatusStyles(statusOption.value, true) : getStatusStyles(statusOption.value, false)
+                          }`}
+                        >
+                          <Icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${statusOption.value === "processing" && updatingStatus ? "animate-spin" : ""}`} />
+                          <div className="flex-1 text-left">
+                            <div className="font-semibold text-sm">
+                              {statusOption.label}
                             </div>
-                          )}
-                        </div>
-                      </Button>
+                            <div className={`text-xs mt-0.5 ${isActive ? "opacity-90" : "text-muted-foreground"}`}>
+                              {statusOption.description}
+                            </div>
+                            {isActive && (
+                              <div className="text-xs mt-1 font-medium opacity-90">
+                                ✓ Current Status {hasUpdate && "• Has update"}
+                              </div>
+                            )}
+                          </div>
+                        </Button>
+
+                        {/* Status Update Form */}
+                        {isActive && activeStatusForm === statusOption.value && (
+                          <Card className={`mt-3 ${getStatusStyles(statusOption.value, false)} border-2`}>
+                            <div className="p-4 space-y-3">
+                              <div>
+                                <label className="text-xs font-medium mb-1 block">
+                                  Remarks {statusOption.value === "rejected" && "(Required)"}
+                                </label>
+                                <Textarea
+                                  value={formData.remarks}
+                                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                                  placeholder={`Add remarks for ${statusOption.label.toLowerCase()}...`}
+                                  className="min-h-[80px] bg-white text-sm"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-medium mb-1 block">
+                                  Evidence Photo (Optional)
+                                </label>
+                                <Input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => setFormData({ ...formData, evidence: e.target.files?.[0] || null })}
+                                  className="bg-white text-sm"
+                                />
+                                {hasUpdate?.evidence_url && (
+                                  <p className="text-xs mt-1 text-muted-foreground">
+                                    Current: <a href={hasUpdate.evidence_url} target="_blank" rel="noopener noreferrer" className="underline">View image</a>
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={submitStatusUpdate}
+                                  disabled={submitting || (statusOption.value === "rejected" && !formData.remarks.trim())}
+                                  size="sm"
+                                  className="flex-1"
+                                >
+                                  {submitting ? (
+                                    <>
+                                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                      Saving...
+                                    </>
+                                  ) : hasUpdate ? (
+                                    "Update"
+                                  ) : (
+                                    "Save"
+                                  )}
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    setActiveStatusForm(null);
+                                    setFormData({ remarks: "", evidence: null });
+                                  }}
+                                  variant="outline"
+                                  size="sm"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+
+                              {hasUpdate && (
+                                <p className="text-xs text-muted-foreground">
+                                  Last updated: {new Date(hasUpdate.created_at).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                          </Card>
+                        )}
+
+                        {/* Display existing update if not editing */}
+                        {hasUpdate && activeStatusForm !== statusOption.value && (
+                          <Card className={`mt-2 ${getStatusStyles(statusOption.value, false)} border`}>
+                            <div className="p-3 space-y-2">
+                              {hasUpdate.remarks && (
+                                <p className="text-sm">{hasUpdate.remarks}</p>
+                              )}
+                              {hasUpdate.evidence_url && (
+                                <button
+                                  onClick={() => setSelectedImage(hasUpdate.evidence_url!)}
+                                  className="relative w-32 h-20 rounded-md overflow-hidden bg-gray-100 border-2 border-gray-200 hover:border-primary transition-colors group"
+                                >
+                                  <Image
+                                    src={hasUpdate.evidence_url}
+                                    alt="Status update evidence"
+                                    fill
+                                    unoptimized
+                                    className="object-cover"
+                                  />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                    <span className="text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity font-medium">Click to expand</span>
+                                  </div>
+                                </button>
+                              )}
+                            </div>
+                          </Card>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
               </div>
             </Card>
-
-            {/* Feedback Card - Only show if status is rejected */}
-            {complaint.status === "rejected" && (
-              <Card className="border-rose-200 bg-rose-50/50">
-                <div className="p-6">
-                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-rose-900">
-                    <MessageSquare className="w-5 h-5" />
-                    Rejection Feedback
-                  </h3>
-                  <p className="text-xs text-rose-700 mb-4">
-                    Provide a reason for rejecting this complaint. This will be visible to the user.
-                  </p>
-                  <Textarea
-                    value={feedbackText}
-                    onChange={(e) => setFeedbackText(e.target.value)}
-                    placeholder="Explain why this complaint cannot be processed..."
-                    className="min-h-[120px] mb-3 bg-white border-rose-200 focus:border-rose-300"
-                  />
-                  <Button
-                    onClick={submitFeedback}
-                    disabled={submittingFeedback || !feedbackText.trim()}
-                    className="w-full"
-                    variant="default"
-                  >
-                    {submittingFeedback ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : feedback ? (
-                      "Update Feedback"
-                    ) : (
-                      "Submit Feedback"
-                    )}
-                  </Button>
-                  {feedback && (
-                    <p className="text-xs text-rose-600 mt-2 text-center">
-                      Last updated: {new Date(feedback.created_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  )}
-                </div>
-              </Card>
-            )}
           </div>
         </div>
       </div>

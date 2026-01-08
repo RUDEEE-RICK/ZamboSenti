@@ -7,6 +7,7 @@ import { Input } from "@/components/headless/Input";
 import { Textarea } from "@/components/headless/Textarea";
 import { Select, type SelectOption } from "@/components/headless/Select";
 import { Stepper } from "@/components/headless/Stepper";
+import { AppHeader } from "@/components/app-header";
 import { BARANGAYS } from "@/lib/data/barangays";
 import {
   X,
@@ -91,6 +92,7 @@ export default function ReportPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
@@ -109,6 +111,11 @@ export default function ReportPage() {
     imageFile: null as File | null,
     imagePreview: null as string | null,
     isAnonymous: false,
+    isPublic: false,
+    guestName: "",
+    guestEmail: "",
+    guestPhone: "",
+    providePersonalInfo: false,
   });
   const [userDefaultBarangay, setUserDefaultBarangay] =
     useState<SelectOption | null>(null);
@@ -174,11 +181,14 @@ export default function ReportPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push("/auth/login");
+        // Allow guest users
+        setIsGuest(true);
+        setIsAdmin(false);
         return;
       }
 
       setUserId(user.id);
+      setIsGuest(false);
 
       // Fetch user's profile to check admin status and default barangay
       const { data: profile } = await supabase
@@ -271,6 +281,15 @@ export default function ReportPage() {
       ) {
         errors.contactNumber = "Invalid Philippine mobile number format";
       }
+      
+      // Guest validation
+      if (isGuest && formData.providePersonalInfo) {
+        if (!formData.guestName.trim()) errors.guestName = "Name is required";
+        if (!formData.guestEmail.trim()) errors.guestEmail = "Email is required";
+        if (formData.guestEmail && !/\S+@\S+\.\S+/.test(formData.guestEmail)) {
+          errors.guestEmail = "Invalid email format";
+        }
+      }
     }
 
     setValidationErrors(errors);
@@ -278,45 +297,45 @@ export default function ReportPage() {
   };
 
   const handleNext = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
-    }
+    if (!validateStep(currentStep)) return;
+    setCurrentStep((prev) => prev + 1);
   };
 
   const handleBack = () => {
-    setCurrentStep((prev) => Math.max(prev - 1, 0));
+    setCurrentStep((prev) => prev - 1);
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(3)) return;
+    if (!validateStep(4)) return;
 
     setError(null);
-    if (!userId) {
-      setError("You must be logged in to submit a report");
-      return;
-    }
-
     setIsLoading(true);
     const supabase = createClient();
 
     try {
-      const {
-        data: { user: currentUser },
-        error: authError,
-      } = await supabase.auth.getUser();
-      if (authError || !currentUser)
-        throw new Error("Authentication required.");
+      let complaintUserId = null;
+      
+      if (!isGuest) {
+        const {
+          data: { user: currentUser },
+          error: authError,
+        } = await supabase.auth.getUser();
+        if (authError || !currentUser)
+          throw new Error("Authentication required.");
 
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", currentUser.id)
-        .single();
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", currentUser.id)
+          .single();
 
-      if (profileError || !profileData)
-        throw new Error(
-          "User profile not found. Please complete your profile."
-        );
+        if (profileError || !profileData)
+          throw new Error(
+            "User profile not found. Please complete your profile."
+          );
+        
+        complaintUserId = currentUser.id;
+      }
 
       let imagePath = null;
       if (formData.imageFile) {
@@ -349,22 +368,32 @@ export default function ReportPage() {
         imagePath = publicUrl;
         console.log("🔗 Public URL generated:", imagePath);
       }
-
       console.log("📝 Inserting complaint into database...");
+      
+      const complaintPayload: any = {
+        title: formData.title.trim(),
+        category: formData.category?.name,
+        barangay: formData.barangay?.name,
+        location: formData.location.trim(),
+        content: formData.description.trim(),
+        user_id: complaintUserId,
+        status: "pending",
+        is_anonymous: isGuest ? !formData.providePersonalInfo : formData.isAnonymous,
+        is_public: formData.isPublic,
+        image_url: imagePath,
+        view_count: 0,
+      };
+
+      // Add guest info if provided
+      if (isGuest && formData.providePersonalInfo) {
+        complaintPayload.guest_name = formData.guestName.trim();
+        complaintPayload.guest_email = formData.guestEmail.trim();
+        complaintPayload.guest_phone = formData.guestPhone.trim();
+      }
       
       const { data: complaintData, error: insertError } = await supabase
         .from("complaints")
-        .insert({
-          title: formData.title.trim(),
-          category: formData.category?.name,
-          barangay: formData.barangay?.name,
-          location: formData.location.trim(),
-          content: formData.description.trim(),
-          user_id: currentUser.id,
-          status: "pending",
-          is_anonymous: formData.isAnonymous,
-          image_url: imagePath, // Store image URL directly in complaints
-        })
+        .insert(complaintPayload)
         .select()
         .single();
 
@@ -405,8 +434,19 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex flex-col items-center justify-center px-4 sm:px-6 py-6">
-      <motion.div
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 pb-24 md:pb-8">
+      <AppHeader />
+      
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Report an Issue</h1>
+          <p className="text-muted-foreground">
+            Submit a complaint or report a problem in your community
+          </p>
+        </div>
+
+      <div className="flex flex-col items-center justify-center">      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-2xl"
@@ -837,6 +877,84 @@ export default function ReportPage() {
                         error={validationErrors.contactNumber}
                       />
 
+                      {/* Guest Personal Info Section */}
+                      {isGuest && (
+                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-200 space-y-4">
+                          <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.providePersonalInfo}
+                              onChange={(e) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  providePersonalInfo: e.target.checked,
+                                }))
+                              }
+                              className="mt-0.5 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <div className="flex-1">
+                              <span className="font-medium text-gray-900">
+                                Provide my contact information
+                              </span>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Help us reach you for updates (optional)
+                              </p>
+                            </div>
+                          </label>
+
+                          {formData.providePersonalInfo && (
+                            <div className="space-y-3 pt-2">
+                              <Input
+                                label={
+                                  <>
+                                    Your Name{" "}
+                                    <span className="text-rose-500">*</span>
+                                  </>
+                                }
+                                placeholder="Juan Dela Cruz"
+                                value={formData.guestName}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    guestName: e.target.value,
+                                  }))
+                                }
+                                error={validationErrors.guestName}
+                              />
+                              <Input
+                                label={
+                                  <>
+                                    Email{" "}
+                                    <span className="text-rose-500">*</span>
+                                  </>
+                                }
+                                type="email"
+                                placeholder="your.email@example.com"
+                                value={formData.guestEmail}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    guestEmail: e.target.value,
+                                  }))
+                                }
+                                error={validationErrors.guestEmail}
+                              />
+                              <Input
+                                label="Phone Number"
+                                placeholder="09XX XXX XXXX"
+                                value={formData.guestPhone}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    guestPhone: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Summary Card */}
                       <div className="bg-gradient-to-br from-gray-50 to-purple-50/30 rounded-xl p-5 space-y-4 text-sm border border-gray-100">
                         <h3 className="font-semibold text-foreground">
@@ -876,30 +994,57 @@ export default function ReportPage() {
                       </div>
 
                       {/* Anonymous Submission Checkbox */}
-                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                      {!isGuest && (
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                          <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.isAnonymous}
+                              onChange={(e) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  isAnonymous: e.target.checked,
+                                }))
+                              }
+                              className="mt-0.5 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <UserX className="w-4 h-4 text-gray-600" />
+                                <span className="font-medium text-gray-900">
+                                  Submit anonymously
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Your name will be hidden from public view. Only
+                                administrators can see your identity for follow-up
+                                purposes.
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                      )}
+
+                      {/* Public Visibility Toggle */}
+                      <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
                         <label className="flex items-start gap-3 cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={formData.isAnonymous}
+                            checked={formData.isPublic}
                             onChange={(e) =>
                               setFormData((prev) => ({
                                 ...prev,
-                                isAnonymous: e.target.checked,
+                                isPublic: e.target.checked,
                               }))
                             }
-                            className="mt-0.5 rounded border-gray-300 text-primary focus:ring-primary"
+                            className="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-600"
                           />
                           <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <UserX className="w-4 h-4 text-gray-600" />
-                              <span className="font-medium text-gray-900">
-                                Submit anonymously
-                              </span>
-                            </div>
+                            <span className="font-medium text-gray-900">
+                              Share to Social Hub
+                            </span>
                             <p className="text-xs text-gray-500 mt-1">
-                              Your name will be hidden from public view. Only
-                              administrators can see your identity for follow-up
-                              purposes.
+                              Make this complaint visible in the public social hub where others can see, react, and comment on it.
                             </p>
                           </div>
                         </label>
@@ -947,6 +1092,8 @@ export default function ReportPage() {
           </div>
         </div>
       </motion.div>
+      </div>
+      </main>
     </div>
   );
 }

@@ -1,746 +1,813 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import {
-  Search,
-  Loader2,
-  Calendar,
-  User,
-  Plus,
-  Edit2,
-  Trash2,
-  X,
-  AlertCircle,
-  Upload,
-  FileText,
-} from "lucide-react";
+import { useState, useEffect } from "react";
 import { AppHeader } from "@/components/app-header";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Select, type SelectOption } from "@/components/headless/Select";
+import {
+  MessageSquare,
+  Heart,
+  ThumbsUp,
+  ThumbsDown,
+  Eye,
+  MapPin,
+  Calendar,
+  Search,
+  TrendingUp,
+  Clock,
+  Newspaper,
+  AlertCircle,
+  ExternalLink,
+  Flame,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { formatDistanceToNow } from "@/lib/utils/date";
+import { useAuth } from "@/lib/hooks/useAuth";
 import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-interface Article {
+interface HubItem {
+  content_type: "article" | "complaint";
   id: string;
   title: string;
   content: string;
   created_at: string;
-  user_id: string;
-  profiles: {
-    name: string;
-  } | null;
+  view_count: number;
+  category: string | null;
+  barangay: string | null;
+  location: string | null;
+  status?: string | null;
+  author_name: string | null;
+  image_url?: string | null;
+  reactions?: {
+    hearts: number;
+    thumbs_up: number;
+    thumbs_down: number;
+  };
+  comment_count?: number;
 }
 
-interface ArticleWithImages extends Article {
-  images: string[];
-}
+type SortOption = "latest" | "trending" | "most-viewed";
+type FilterOption = "all" | "articles" | "complaints";
 
-interface FormData {
-  title: string;
-  content: string;
-  imageFiles: File[];
-}
-
-const initialFormData: FormData = {
-  title: "",
-  content: "",
-  imageFiles: [],
-};
-
-export default function NewsPage() {
+export default function HubPage() {
   const router = useRouter();
-  const [articles, setArticles] = useState<ArticleWithImages[]>([]);
+  const { user } = useAuth();
+  const [items, setItems] = useState<HubItem[]>([]);
+  const [trendingComplaint, setTrendingComplaint] = useState<HubItem | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>("latest");
+  const [filterBy, setFilterBy] = useState<FilterOption>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
-  // Admin form state
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<FormData>(initialFormData);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const checkAdminStatus = useCallback(async () => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("user_roles")
-        .eq("id", user.id)
-        .single();
-
-      setIsAdmin(profile?.user_roles === "admin");
-    }
-  }, []);
+  const sortOptions: SelectOption[] = [
+    { id: "latest", name: "Latest" },
+    { id: "trending", name: "Trending" },
+    { id: "most-viewed", name: "Most Viewed" },
+  ];
 
   useEffect(() => {
-    fetchArticles();
     checkAdminStatus();
-  }, [checkAdminStatus]);
+  }, [user]);
 
-  const fetchArticles = async () => {
+  useEffect(() => {
+    fetchHubContent();
+    setCurrentPage(1);
+  }, [sortBy, filterBy, searchQuery]);
+
+  const checkAdminStatus = async () => {
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    
     const supabase = createClient();
+    const { data } = await supabase.rpc("is_admin");
+    setIsAdmin(data === true);
+  };
+
+  const fetchHubContent = async () => {
     setIsLoading(true);
+    const supabase = createClient();
 
     try {
-      const { data: articlesData, error: articlesError } = await supabase
-        .from("articles")
-        .select(
-          `
-          id,
-          title,
-          content,
-          created_at,
-          user_id,
-          profiles:user_id (
-            name
-          )
-        `
-        )
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+      let articles: HubItem[] = [];
+      let complaints: HubItem[] = [];
 
-      if (articlesError) {
-        console.error("Error fetching articles:", articlesError);
-        return;
+      // Fetch articles if not filtering for complaints only
+      if (filterBy !== "complaints") {
+        const { data: articlesData, error: articlesError } = await supabase
+          .from("articles")
+          .select(
+            `
+            id,
+            title,
+            content,
+            created_at,
+            view_count,
+            profiles:user_id(name)
+          `
+          )
+          .is("deleted_at", null);
+
+        if (!articlesError && articlesData) {
+          articles = await Promise.all(
+            articlesData.map(async (article: any) => {
+              // Fetch images
+              const { data: pictureLinks } = await supabase
+                .from("article_pictures")
+                .select("pictures:picture_id(image_path)")
+                .eq("article_id", article.id)
+                .limit(1);
+
+              const pictureData = pictureLinks?.[0]?.pictures as { image_path: string } | null | undefined;
+              const image_url = pictureData?.image_path || null;
+
+              // Fetch reactions
+              const { data: reactionsData } = await supabase
+                .from("article_reactions")
+                .select("reaction_type")
+                .eq("article_id", article.id);
+
+              // Fetch comments count
+              const { count: commentsCount } = await supabase
+                .from("article_comments")
+                .select("*", { count: "exact", head: true })
+                .eq("article_id", article.id);
+
+              const reactions = {
+                hearts: reactionsData?.filter((r: any) => r.reaction_type === "heart").length || 0,
+                thumbs_up: reactionsData?.filter((r: any) => r.reaction_type === "thumbs_up").length || 0,
+                thumbs_down: reactionsData?.filter((r: any) => r.reaction_type === "thumbs_down").length || 0,
+              };
+
+              const profiles = Array.isArray(article.profiles) ? article.profiles[0] : article.profiles;
+
+              return {
+                content_type: "article" as const,
+                id: article.id,
+                title: article.title,
+                content: article.content,
+                created_at: article.created_at,
+                view_count: article.view_count || 0,
+                category: null,
+                barangay: null,
+                location: null,
+                author_name: profiles?.name || "Admin",
+                image_url,
+                reactions,
+                comment_count: commentsCount || 0,
+              };
+            })
+          );
+        }
       }
 
-      const articlesWithImages = await Promise.all(
-        (articlesData || []).map(async (article) => {
-          const { data: pictureLinks } = await supabase
-            .from("article_pictures")
-            .select(
-              `
-              pictures:picture_id (
-                image_path
-              )
+      // Fetch complaints if not filtering for articles only
+      if (filterBy !== "articles") {
+        const { data: complaintsData, error: complaintsError } = await supabase
+          .from("complaints")
+          .select(
             `
-            )
-            .eq("article_id", article.id);
+            id,
+            title,
+            content,
+            category,
+            barangay,
+            location,
+            image_url,
+            status,
+            created_at,
+            view_count,
+            is_anonymous,
+            guest_name,
+            profiles:user_id(name)
+          `
+          )
+          .eq("is_public", true);
 
-          const images =
-            pictureLinks
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ?.map((link: any) => link.pictures?.image_path)
-              .filter(Boolean) || [];
+        if (!complaintsError && complaintsData) {
+          complaints = await Promise.all(
+            complaintsData.map(async (complaint: any) => {
+              // Fetch reactions
+              const { data: reactionsData } = await supabase
+                .from("complaint_reactions")
+                .select("reaction_type")
+                .eq("complaint_id", complaint.id);
 
-          const profiles = Array.isArray(article.profiles)
-            ? article.profiles[0] || null
-            : article.profiles;
+              // Fetch comments count
+              const { count: commentsCount } = await supabase
+                .from("complaint_comments")
+                .select("*", { count: "exact", head: true })
+                .eq("complaint_id", complaint.id);
 
-          return {
-            ...article,
-            profiles,
-            images,
-          };
-        })
-      );
+              const reactions = {
+                hearts: reactionsData?.filter((r: any) => r.reaction_type === "heart").length || 0,
+                thumbs_up: reactionsData?.filter((r: any) => r.reaction_type === "thumbs_up").length || 0,
+                thumbs_down: reactionsData?.filter((r: any) => r.reaction_type === "thumbs_down").length || 0,
+              };
 
-      setArticles(articlesWithImages);
+              const profiles = Array.isArray(complaint.profiles) ? complaint.profiles[0] : complaint.profiles;
+              const author_name = complaint.is_anonymous
+                ? "Anonymous"
+                : complaint.guest_name || profiles?.name || "Unknown";
+
+              return {
+                content_type: "complaint" as const,
+                id: complaint.id,
+                title: complaint.title,
+                content: complaint.content,
+                created_at: complaint.created_at,
+                view_count: complaint.view_count || 0,
+                category: complaint.category,
+                barangay: complaint.barangay,
+                location: complaint.location,
+                status: complaint.status,
+                author_name,
+                image_url: complaint.image_url,
+                reactions,
+                comment_count: commentsCount || 0,
+              };
+            })
+          );
+        }
+      }
+
+      // Combine and sort
+      let combined = [...articles, ...complaints];
+
+      if (sortBy === "latest") {
+        combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      } else if (sortBy === "most-viewed") {
+        combined.sort((a, b) => b.view_count - a.view_count);
+      } else if (sortBy === "trending") {
+        combined.sort((a, b) => {
+          const aScore =
+            (a.reactions?.hearts || 0) * 2 +
+            (a.reactions?.thumbs_up || 0) +
+            (a.comment_count || 0) * 3;
+          const bScore =
+            (b.reactions?.hearts || 0) * 2 +
+            (b.reactions?.thumbs_up || 0) +
+            (b.comment_count || 0) * 3;
+          return bScore - aScore;
+        });
+      }
+
+      setItems(combined);
+
+      // Find trending complaint (highest engagement score among complaints)
+      const onlyComplaints = complaints;
+      if (onlyComplaints.length > 0) {
+        const trending = onlyComplaints.reduce((prev, current) => {
+          const prevScore =
+            (prev.reactions?.hearts || 0) * 2 +
+            (prev.reactions?.thumbs_up || 0) +
+            (prev.comment_count || 0) * 3;
+          const currentScore =
+            (current.reactions?.hearts || 0) * 2 +
+            (current.reactions?.thumbs_up || 0) +
+            (current.comment_count || 0) * 3;
+          return currentScore > prevScore ? current : prev;
+        });
+        setTrendingComplaint(trending);
+      }
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error fetching hub content:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const handleReaction = async (item: HubItem, reactionType: string) => {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    // Validate files
-    for (const file of files) {
-      if (file.size > 10 * 1024 * 1024) {
-        setError("Each image must be less than 10MB");
-        return;
-      }
-      if (!file.type.startsWith("image/")) {
-        setError("Only image files are allowed");
-        return;
-      }
-    }
-
-    setFormData((prev) => ({
-      ...prev,
-      imageFiles: [...prev.imageFiles, ...files],
-    }));
-    setError(null);
-
-    // Create previews
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreviews((prev) => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const removeImage = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      imageFiles: prev.imageFiles.filter((_, i) => i !== index),
-    }));
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError(null);
-
-    if (!formData.title.trim() || !formData.content.trim()) {
-      setError("Title and content are required");
-      setIsSubmitting(false);
+    if (!user) {
+      alert("Please login to react");
       return;
     }
 
-    const supabase = createClient();
+    const table = item.content_type === "article" ? "article_reactions" : "complaint_reactions";
+    const idColumn = item.content_type === "article" ? "article_id" : "complaint_id";
 
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+    const { data: existing } = await supabase
+      .from(table)
+      .select("*")
+      .eq(idColumn, item.id)
+      .eq("user_id", user.id)
+      .single();
 
-      if (editingId) {
-        // Update existing article
-        const { error: updateError } = await supabase
-          .from("articles")
-          .update({
-            title: formData.title.trim(),
-            content: formData.content.trim(),
-          })
-          .eq("id", editingId);
+    let action: "add" | "remove" | "change" = "add";
+    let oldReactionType: string | null = null;
 
-        if (updateError) throw updateError;
-
-        // Handle images for edit (simplified - you may want to delete old images first)
-        if (formData.imageFiles.length > 0) {
-          for (const imageFile of formData.imageFiles) {
-            const fileExt = imageFile.name.split(".").pop();
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-            const { error: uploadError } =
-              await supabase.storage
-                .from("article-images")
-                .upload(fileName, imageFile);
-
-            if (uploadError) {
-              console.error("Upload error:", uploadError);
-              throw new Error(`Failed to upload image: ${uploadError.message}`);
-            }
-
-            const {
-              data: { publicUrl },
-            } = supabase.storage.from("article-images").getPublicUrl(fileName);
-
-            const { data: pictureData, error: pictureError } = await supabase
-              .from("pictures")
-              .insert({ 
-                image_path: publicUrl,
-                parent_type: 'article',
-                parent_id: editingId
-              })
-              .select()
-              .single();
-
-            if (pictureError) {
-              console.error("Picture insert error:", pictureError);
-              throw new Error(`Failed to save image record: ${pictureError.message}`);
-            }
-
-            const { error: linkError } = await supabase.from("article_pictures").insert({
-              article_id: editingId,
-              picture_id: pictureData.id,
-            });
-
-            if (linkError) {
-              console.error("Link error:", linkError);
-              throw new Error(`Failed to link image: ${linkError.message}`);
-            }
-          }
-        }
+    if (existing) {
+      if (existing.reaction_type === reactionType) {
+        action = "remove";
+        await supabase.from(table).delete().eq("id", existing.id);
       } else {
-        // Create new article
-        const { data: articleData, error: insertError } = await supabase
-          .from("articles")
-          .insert({
-            title: formData.title.trim(),
-            content: formData.content.trim(),
-            user_id: user.id,
-          })
-          .select()
-          .single();
+        action = "change";
+        oldReactionType = existing.reaction_type;
+        await supabase
+          .from(table)
+          .update({ reaction_type: reactionType })
+          .eq("id", existing.id);
+      }
+    } else {
+      await supabase.from(table).insert({
+        [idColumn]: item.id,
+        user_id: user.id,
+        reaction_type: reactionType,
+      });
+    }
 
-        if (insertError) throw insertError;
-
-        // Upload images
-        if (formData.imageFiles.length > 0) {
-          for (const imageFile of formData.imageFiles) {
-            const fileExt = imageFile.name.split(".").pop();
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-            const { error: uploadError } =
-              await supabase.storage
-                .from("article-images")
-                .upload(fileName, imageFile);
-
-            if (uploadError) {
-              console.error("Upload error:", uploadError);
-              throw new Error(`Failed to upload image: ${uploadError.message}`);
-            }
-
-            const {
-              data: { publicUrl },
-            } = supabase.storage.from("article-images").getPublicUrl(fileName);
-
-            const { data: pictureData, error: pictureError } = await supabase
-              .from("pictures")
-              .insert({ 
-                image_path: publicUrl,
-                parent_type: 'article',
-                parent_id: articleData.id
-              })
-              .select()
-              .single();
-
-            if (pictureError) {
-              console.error("Picture insert error:", pictureError);
-              throw new Error(`Failed to save image record: ${pictureError.message}`);
-            }
-
-            const { error: linkError } = await supabase.from("article_pictures").insert({
-              article_id: articleData.id,
-              picture_id: pictureData.id,
-            });
-
-            if (linkError) {
-              console.error("Link error:", linkError);
-              throw new Error(`Failed to link image: ${linkError.message}`);
-            }
-          }
-        }
+    // Update local state without refetching
+    const updateReactions = (currentItem: HubItem) => {
+      if (currentItem.id !== item.id || currentItem.content_type !== item.content_type) {
+        return currentItem;
       }
 
-      setShowForm(false);
-      setEditingId(null);
-      setFormData(initialFormData);
-      setImagePreviews([]);
-      await fetchArticles();
-    } catch (err) {
-      console.error("Error saving article:", err);
-      setError(err instanceof Error ? err.message : "Failed to save article");
-    } finally {
-      setIsSubmitting(false);
-    }
+      const newReactions = {
+        hearts: currentItem.reactions?.hearts || 0,
+        thumbs_up: currentItem.reactions?.thumbs_up || 0,
+        thumbs_down: currentItem.reactions?.thumbs_down || 0,
+      };
+
+      if (action === "add") {
+        if (reactionType === "heart") newReactions.hearts++;
+        else if (reactionType === "thumbs_up") newReactions.thumbs_up++;
+        else if (reactionType === "thumbs_down") newReactions.thumbs_down++;
+      } else if (action === "remove") {
+        if (reactionType === "heart") newReactions.hearts = Math.max(0, newReactions.hearts - 1);
+        else if (reactionType === "thumbs_up") newReactions.thumbs_up = Math.max(0, newReactions.thumbs_up - 1);
+        else if (reactionType === "thumbs_down") newReactions.thumbs_down = Math.max(0, newReactions.thumbs_down - 1);
+      } else if (action === "change" && oldReactionType) {
+        // Decrement old reaction
+        if (oldReactionType === "heart") newReactions.hearts = Math.max(0, newReactions.hearts - 1);
+        else if (oldReactionType === "thumbs_up") newReactions.thumbs_up = Math.max(0, newReactions.thumbs_up - 1);
+        else if (oldReactionType === "thumbs_down") newReactions.thumbs_down = Math.max(0, newReactions.thumbs_down - 1);
+        // Increment new reaction
+        if (reactionType === "heart") newReactions.hearts++;
+        else if (reactionType === "thumbs_up") newReactions.thumbs_up++;
+        else if (reactionType === "thumbs_down") newReactions.thumbs_down++;
+      }
+
+      return {
+        ...currentItem,
+        reactions: newReactions,
+      };
+    };
+
+    setItems((prevItems) => prevItems.map(updateReactions));
+    setTrendingComplaint((prev) => prev ? updateReactions(prev) : prev);
   };
 
-  const handleEdit = (article: ArticleWithImages) => {
-    setFormData({
-      title: article.title,
-      content: article.content,
-      imageFiles: [],
-    });
-    setImagePreviews([]);
-    setEditingId(article.id);
-    setShowForm(true);
+  const filteredItems = items.filter((item) => {
+    const matchesSearch =
+      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.content.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
+  });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this article?")) return;
-
-    setDeletingId(id);
-    const supabase = createClient();
-
-    try {
-      const { error: deleteError } = await supabase
-        .from("articles")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
-
-      if (deleteError) throw deleteError;
-      await fetchArticles();
-    } catch (err) {
-      console.error("Error deleting article:", err);
-      setError("Failed to delete article");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const handleCancel = () => {
-    setShowForm(false);
-    setEditingId(null);
-    setFormData(initialFormData);
-    setImagePreviews([]);
-    setError(null);
-  };
-
-  const filteredArticles = articles.filter(
-    (article) =>
-      article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const featuredArticle = filteredArticles[0];
-  const otherArticles = filteredArticles.slice(1);
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
-      <AppHeader title="News" showNotifications={false} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-red-950/20">
+      <AppHeader />
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">Community Hub</h1>
+          <p className="text-muted-foreground">
+            Latest news, updates, and community complaints
+          </p>
+        </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Header with Admin Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              Latest news and announcements for Zamboanga City
-            </p>
+        {/* Filters and Search */}
+        <div className="mb-6 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Input
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            {/* Desktop: Buttons, Mobile: Dropdown */}
+            <div className="hidden sm:flex gap-2">
+              <Button
+                variant={sortBy === "latest" ? "default" : "outline"}
+                onClick={() => setSortBy("latest")}
+                size="sm"
+                className="gap-2"
+              >
+                <Clock className="w-4 h-4" />
+                Latest
+              </Button>
+              <Button
+                variant={sortBy === "trending" ? "default" : "outline"}
+                onClick={() => setSortBy("trending")}
+                size="sm"
+                className="gap-2"
+              >
+                <TrendingUp className="w-4 h-4" />
+                Trending
+              </Button>
+              <Button
+                variant={sortBy === "most-viewed" ? "default" : "outline"}
+                onClick={() => setSortBy("most-viewed")}
+                size="sm"
+                className="gap-2"
+              >
+                <Eye className="w-4 h-4" />
+                Views
+              </Button>
+            </div>
+            <div className="sm:hidden">
+              <Select
+                value={sortOptions.find(opt => opt.id === sortBy) || null}
+                onChange={(option) => setSortBy(option.id as SortOption)}
+                options={sortOptions}
+                placeholder="Sort by"
+              />
+            </div>
           </div>
-          {isAdmin && (
+
+          {/* Type Filter */}
+          <div className="flex gap-2">
             <Button
-              onClick={() => setShowForm(true)}
-              className="bg-primary hover:bg-primary/90"
+              variant={filterBy === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterBy("all")}
             >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Article
+              All
             </Button>
-          )}
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search articles..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-11 rounded-xl border-gray-200"
-          />
-        </div>
-
-        {/* Error */}
-        {error && (
-          <Card className="border-rose-200 bg-rose-50 p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
-              <p className="text-sm text-rose-700">{error}</p>
-            </div>
-          </Card>
-        )}
-
-        {/* Add/Edit Form */}
-        {showForm && isAdmin && (
-          <Card className="p-6 border-primary/20 bg-primary/5">
-            <h3 className="font-semibold mb-4">
-              {editingId ? "Edit Article" : "Add New Article"}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-foreground block mb-2">
-                  Title *
-                </label>
-                <Input
-                  value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
-                  placeholder="Article title"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-foreground block mb-2">
-                  Content *
-                </label>
-                <Textarea
-                  value={formData.content}
-                  onChange={(e) =>
-                    setFormData({ ...formData, content: e.target.value })
-                  }
-                  placeholder="Article content"
-                  rows={6}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-foreground block mb-2">
-                  Images
-                </label>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <label className="cursor-pointer">
-                      <div className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                        <Upload className="w-4 h-4" />
-                        <span className="text-sm">Upload Images</span>
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-
-                  {imagePreviews.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {imagePreviews.map((preview, index) => (
-                        <div key={index} className="relative group">
-                          <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-100">
-                            <Image
-                              src={preview}
-                              alt={`Preview ${index + 1}`}
-                              fill
-                              className="object-cover"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeImage(index)}
-                            className="absolute top-1 right-1 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      {editingId ? "Update" : "Create"}
-                    </>
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleCancel}
-                  disabled={isSubmitting}
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </Card>
-        )}
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="flex items-center gap-3 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Loading articles...</span>
-            </div>
+            <Button
+              variant={filterBy === "articles" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterBy("articles")}
+              className="gap-2"
+            >
+              <Newspaper className="w-4 h-4" />
+              News
+            </Button>
+            <Button
+              variant={filterBy === "complaints" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterBy("complaints")}
+              className="gap-2"
+            >
+              <AlertCircle className="w-4 h-4" />
+              Complaints
+            </Button>
           </div>
-        ) : filteredArticles.length === 0 ? (
-          <Card className="p-12 text-center border-gray-100">
-            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <h3 className="font-semibold mb-1">No articles found</h3>
-            <p className="text-sm text-muted-foreground">
-              {searchQuery
-                ? "No articles found matching your search."
-                : "No articles available yet."}
-            </p>
+        </div>
+
+        {/* Content Grid */}
+        {isLoading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <Card className="p-12 text-center">
+            <p className="text-muted-foreground">No content found</p>
           </Card>
         ) : (
-          <div className="space-y-4">
-            {/* Featured Article */}
-            {featuredArticle && (
-              <Card className="overflow-hidden border-gray-100">
-                <div className="relative">
-                  {featuredArticle.images.length > 0 ? (
-                    <div
-                      className="relative w-full aspect-[2/1] cursor-pointer"
-                      onClick={() => router.push(`/news/${featuredArticle.id}`)}
-                    >
+          <div className="space-y-6">
+            {/* Trending Complaint Highlight */}
+            {trendingComplaint && filterBy !== "articles" && (
+              <Card className="overflow-hidden border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+                <div className="p-4 bg-primary/10 border-b border-primary/20">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-primary" />
+                    <h2 className="text-lg font-bold text-primary">Trending Complaint</h2>
+                  </div>
+                </div>
+                <div className="flex flex-col md:flex-row gap-4 p-6">
+                  {trendingComplaint.image_url && (
+                    <div className="relative w-full md:w-64 h-48 flex-shrink-0 rounded-lg overflow-hidden">
                       <Image
-                        src={featuredArticle.images[0]}
-                        alt={featuredArticle.title}
+                        src={trendingComplaint.image_url}
+                        alt={trendingComplaint.title}
                         fill
                         className="object-cover"
                       />
                     </div>
-                  ) : (
-                    <div
-                      className="w-full aspect-[2/1] bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center cursor-pointer"
-                      onClick={() => router.push(`/news/${featuredArticle.id}`)}
-                    >
-                      <span className="text-primary font-bold text-4xl opacity-30">
-                        {featuredArticle.title.charAt(0)}
+                  )}
+                  <div className="flex-1 space-y-3">
+                    <div className="flex gap-2 flex-wrap">
+                      <Badge variant="secondary" className="gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        Complaint
+                      </Badge>
+                      {trendingComplaint.category && (
+                        <Badge variant="outline">{trendingComplaint.category}</Badge>
+                      )}
+                      {trendingComplaint.status && (
+                        <Badge
+                          className={
+                            trendingComplaint.status === "solved"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : trendingComplaint.status === "processing"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : trendingComplaint.status === "rejected"
+                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          }
+                        >
+                          {trendingComplaint.status.replace("_", " ").toUpperCase()}
+                        </Badge>
+                      )}
+                    </div>
+                    <h3 className="text-2xl font-bold">{trendingComplaint.title}</h3>
+                    <p className="text-muted-foreground line-clamp-2">
+                      {trendingComplaint.content}
+                    </p>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                      {trendingComplaint.barangay && (
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          {trendingComplaint.barangay}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        {formatDistanceToNow(new Date(trendingComplaint.created_at))}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Eye className="w-4 h-4" />
+                        {trendingComplaint.view_count} views
                       </span>
                     </div>
-                  )}
-                </div>
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <Badge variant="secondary">Featured</Badge>
-                    {isAdmin && (
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(featuredArticle)}
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDelete(featuredArticle.id)}
-                          disabled={deletingId === featuredArticle.id}
-                          className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-200"
-                        >
-                          {deletingId === featuredArticle.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-3 h-3" />
-                          )}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                  <h3
-                    className="font-semibold text-lg text-foreground mb-2 cursor-pointer hover:text-primary"
-                    onClick={() => router.push(`/news/${featuredArticle.id}`)}
-                  >
-                    {featuredArticle.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                    {featuredArticle.content.substring(0, 150)}...
-                  </p>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {new Date(featuredArticle.created_at).toLocaleDateString(
-                        "en-US",
-                        { month: "short", day: "numeric", year: "numeric" }
-                      )}
-                    </span>
-                    {featuredArticle.profiles?.name && (
-                      <span className="flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        {featuredArticle.profiles.name}
+                    <div className="flex items-center gap-6">
+                      <span className="flex items-center gap-2 text-rose-500">
+                        <Heart className="w-5 h-5" />
+                        <span className="font-semibold">{trendingComplaint.reactions?.hearts || 0}</span>
                       </span>
-                    )}
+                      <span className="flex items-center gap-2 text-emerald-500">
+                        <ThumbsUp className="w-5 h-5" />
+                        <span className="font-semibold">{trendingComplaint.reactions?.thumbs_up || 0}</span>
+                      </span>
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <MessageSquare className="w-5 h-5" />
+                        <span className="font-semibold">{trendingComplaint.comment_count || 0}</span>
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => router.push(`/news/${trendingComplaint.id}`)}
+                        className="gap-2"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        View Details
+                      </Button>
+                      {isAdmin && (
+                        <Button
+                          onClick={() => router.push(`/admin/complaints/${trendingComplaint.id}`)}
+                          variant="outline"
+                          className="gap-2"
+                        >
+                          Admin Panel
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </Card>
             )}
 
-            {/* Other Articles */}
-            {otherArticles.length > 0 && (
-              <div className="space-y-2">
-                {otherArticles.map((article) => (
-                  <Card
-                    key={article.id}
-                    className="p-4 card-hover border-gray-100"
-                  >
-                    <div className="flex gap-4">
-                      <div
-                        className="flex-1 min-w-0 cursor-pointer"
-                        onClick={() => router.push(`/news/${article.id}`)}
-                      >
-                        <div className="flex gap-3 mb-2">
-                          {article.images.length > 0 ? (
-                            <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
-                              <Image
-                                src={article.images[0]}
-                                alt={article.title}
-                                fill
-                                className="object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-20 h-20 flex-shrink-0 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                              <span className="text-primary font-bold text-xl">
-                                {article.title.charAt(0)}
-                              </span>
-                            </div>
+            {/* List View */}
+            <div className="space-y-3">
+              {paginatedItems.map((item) => (
+                <Card
+                  key={`${item.content_type}-${item.id}`}
+                  className="overflow-hidden hover:shadow-md transition-shadow"
+                >
+                  <div className="flex flex-col sm:flex-row gap-3 p-4">
+                    {/* Image Thumbnail */}
+                    {item.image_url && (
+                      <div className="relative w-full sm:w-32 h-32 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
+                        <Image
+                          src={item.image_url}
+                          alt={item.title}
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                    )}
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0 space-y-2 flex flex-col">
+                      {/* Header with Tags */}
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div className="flex gap-2 flex-wrap">
+                          <Badge
+                            variant={item.content_type === "article" ? "default" : "secondary"}
+                            className="gap-1"
+                          >
+                            {item.content_type === "article" ? (
+                              <>
+                                <Newspaper className="w-3 h-3" />
+                                News
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="w-3 h-3" />
+                                Complaint
+                              </>
+                            )}
+                          </Badge>
+                          {item.category && (
+                            <Badge variant="outline">{item.category}</Badge>
                           )}
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium text-foreground mb-1 line-clamp-2 hover:text-primary">
-                              {article.title}
-                            </h3>
-                            <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                              {article.content.substring(0, 100)}...
-                            </p>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {new Date(article.created_at).toLocaleDateString(
-                                  "en-US",
-                                  { month: "short", day: "numeric" }
-                                )}
-                              </span>
-                              {article.profiles?.name && (
-                                <span>{article.profiles.name}</span>
-                              )}
-                            </div>
-                          </div>
+                          {item.status && item.content_type === "complaint" && (
+                            <Badge
+                              className={
+                                item.status === "solved"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : item.status === "processing"
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : item.status === "rejected"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }
+                            >
+                              {item.status.replace("_", " ").toUpperCase()}
+                            </Badge>
+                          )}
                         </div>
                       </div>
-                      {isAdmin && (
-                        <div className="flex gap-2 flex-shrink-0 items-start">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(article)}
+
+                      {/* Title & Content */}
+                      <Link
+                        href={
+                          item.content_type === "article"
+                            ? `/news/${item.id}`
+                            : `/news/${item.id}`
+                        }
+                      >
+                        <h3 className="font-semibold text-lg line-clamp-2 hover:text-primary transition-colors mt-1">
+                          {item.title}
+                        </h3>
+                      </Link>
+                      <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                        {item.content}
+                      </p>
+
+                      {/* Meta Info & Reactions */}
+                      <div className="flex items-center justify-between gap-4 flex-wrap pt-1 mt-auto">
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                          {item.barangay && (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {item.barangay}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {formatDistanceToNow(new Date(item.created_at))}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Eye className="w-3 h-3" />
+                            {item.view_count}
+                          </span>
+                          <span>By {item.author_name}</span>
+                        </div>
+
+                        {/* Reactions Bar */}
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleReaction(item, "heart");
+                            }}
+                            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-rose-500 transition-colors"
                           >
-                            <Edit2 className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDelete(article.id)}
-                            disabled={deletingId === article.id}
-                            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-200"
+                            <Heart className="w-4 h-4" />
+                            <span>{item.reactions?.hearts || 0}</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleReaction(item, "thumbs_up");
+                            }}
+                            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-emerald-500 transition-colors"
                           >
-                            {deletingId === article.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3 h-3" />
-                            )}
+                            <ThumbsUp className="w-4 h-4" />
+                            <span>{item.reactions?.thumbs_up || 0}</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleReaction(item, "thumbs_down");
+                            }}
+                            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-amber-500 transition-colors"
+                          >
+                            <ThumbsDown className="w-4 h-4" />
+                            <span>{item.reactions?.thumbs_down || 0}</span>
+                          </button>
+                          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <MessageSquare className="w-4 h-4" />
+                            <span>{item.comment_count || 0}</span>
+                          </span>
+                          {isAdmin && item.content_type === "complaint" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => router.push(`/admin/complaints/${item.id}`)}
+                              className="gap-1 ml-2"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Admin
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((page) => {
+                      // Show first page, last page, current page, and pages around current
+                      return (
+                        page === 1 ||
+                        page === totalPages ||
+                        (page >= currentPage - 1 && page <= currentPage + 1)
+                      );
+                    })
+                    .map((page, index, array) => {
+                      const prevPage = array[index - 1];
+                      const showEllipsis = prevPage && page - prevPage > 1;
+                      return (
+                        <div key={page} className="flex items-center gap-1">
+                          {showEllipsis && (
+                            <span className="px-2 text-muted-foreground">...</span>
+                          )}
+                          <Button
+                            variant={currentPage === page ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(page)}
+                            className="min-w-[2.5rem]"
+                          >
+                            {page}
                           </Button>
                         </div>
-                      )}
-                    </div>
-                  </Card>
-                ))}
+                      );
+                    })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </Button>
               </div>
             )}
+
+            {/* Results count */}
+            <div className="text-center text-sm text-muted-foreground mt-4">
+              Showing {startIndex + 1}-{Math.min(endIndex, filteredItems.length)} of {filteredItems.length} items
+            </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

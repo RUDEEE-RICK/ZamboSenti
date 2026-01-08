@@ -17,7 +17,7 @@ const variantStyles = {
   ghost:
     "bg-transparent text-primary hover:bg-primary/5 data-[active]:scale-95",
   destructive:
-    "bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-500/20 data-[active]:scale-95",
+    "bg-red-900 text-white hover:bg-red-950 shadow-lg shadow-red-900/30 data-[active]:scale-95",
 };
 
 type ButtonOwnProps<E extends ElementType = "button"> = {
