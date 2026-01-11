@@ -32,6 +32,8 @@ import {
   Timer,
   Layers,
   RefreshCw,
+  Trash2,
+  AlertOctagon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -176,6 +178,71 @@ export default function AdminStatisticsPage() {
     byGender: [],
     byBarangay: [],
   });
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  const handleClearTable = async (table: string, description: string) => {
+    // Double confirmation for safety
+    const confirmed = window.confirm(
+      `CRITICAL ACTION: Are you sure you want to delete ALL ${description}? \n\nThis will permanently remove all records from the system. This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    const secondConfirmation = window.prompt(
+      `To confirm deletion of all ${description}, please type "DELETE ALL" in the box below:`
+    );
+
+    if (secondConfirmation !== "DELETE ALL") {
+      alert("Action cancelled. Confirmation text did not match.");
+      return;
+    }
+
+    const supabase = createClient();
+    setIsDeleting(table);
+
+    try {
+      // Handle cascading deletions manually if needed, or rely on DB if set up
+      // For complaints, clear child records first
+      if (table === "complaints") {
+        await supabase
+          .from("complaint_reactions")
+          .delete()
+          .neq("id", "00000000-0000-0000-0000-000000000000");
+        await supabase
+          .from("complaint_comments")
+          .delete()
+          .neq("id", "00000000-0000-0000-0000-000000000000");
+        await supabase
+          .from("complaint_feedback")
+          .delete()
+          .neq("id", "00000000-0000-0000-0000-000000000000");
+      }
+
+      let query = supabase
+        .from(table === "profiles_non_admin" ? "profiles" : table)
+        .delete();
+
+      if (table === "profiles_non_admin") {
+        query = query.neq("user_roles", "admin");
+      } else {
+        query = query.neq("id", "00000000-0000-0000-0000-000000000000");
+      }
+
+      const { error } = await query;
+
+      if (error) throw error;
+
+      alert(`Successfully cleared all ${description}.`);
+      fetchStatistics(); // Refresh statistics
+    } catch (err: any) {
+      console.error(`Error clearing ${table}:`, err);
+      alert(
+        `Failed to clear ${description}: ${err.message || "Unknown error"}`
+      );
+    } finally {
+      setIsDeleting(null);
+    }
+  };
 
   const fetchStatistics = useCallback(async () => {
     const supabase = createClient();
@@ -628,363 +695,659 @@ export default function AdminStatisticsPage() {
         </div>
 
         <div className="space-y-6">
-        {/* Back Button & Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <button
-              onClick={() => router.push("/account")}
-              className="text-sm text-muted-foreground hover:text-primary font-medium flex items-center gap-1 transition-colors mb-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Account
-            </button>
+          {/* Back Button & Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <button
+                onClick={() => router.push("/account")}
+                className="text-sm text-muted-foreground hover:text-primary font-medium flex items-center gap-1 transition-colors mb-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Account
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchStatistics}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Refresh
+              </Button>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-white px-3 py-1.5 rounded-full border border-gray-100">
+                <Calendar className="w-3.5 h-3.5" />
+                Updated: {lastUpdated.toLocaleTimeString()}
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchStatistics}
-              className="flex items-center gap-2"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Refresh
-            </Button>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-white px-3 py-1.5 rounded-full border border-gray-100">
-              <Calendar className="w-3.5 h-3.5" />
-              Updated: {lastUpdated.toLocaleTimeString()}
-            </div>
+
+          {/* Quick Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-indigo-50/30">
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-4 h-4 text-indigo-500" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Today
+                </span>
+              </div>
+              <p className="text-2xl font-bold text-foreground">
+                {complaintStats.todayComplaints}
+              </p>
+            </Card>
+
+            <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-violet-50/30">
+              <div className="flex items-center gap-2 mb-1">
+                <Calendar className="w-4 h-4 text-violet-500" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  This Week
+                </span>
+              </div>
+              <p className="text-2xl font-bold text-foreground">
+                {complaintStats.thisWeekComplaints}
+              </p>
+            </Card>
+
+            <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-pink-50/30">
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="w-4 h-4 text-pink-500" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  This Month
+                </span>
+              </div>
+              <p className="text-2xl font-bold text-foreground">
+                {complaintStats.thisMonthComplaints}
+              </p>
+            </Card>
+
+            <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-amber-50/30">
+              <div className="flex items-center gap-2 mb-1">
+                <Eye className="w-4 h-4 text-amber-500" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Anonymous
+                </span>
+              </div>
+              <p className="text-2xl font-bold text-foreground">
+                {complaintStats.anonymous}
+              </p>
+            </Card>
+
+            <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-emerald-50/30">
+              <div className="flex items-center gap-2 mb-1">
+                <Timer className="w-4 h-4 text-emerald-500" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Avg Resolution
+                </span>
+              </div>
+              <p className="text-2xl font-bold text-foreground">
+                {complaintStats.avgResolutionDays}d
+              </p>
+            </Card>
+
+            <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-cyan-50/30">
+              <div className="flex items-center gap-2 mb-1">
+                <UserCheck className="w-4 h-4 text-cyan-500" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Per User
+                </span>
+              </div>
+              <p className="text-2xl font-bold text-foreground">
+                {systemStats.complaintPerUser}
+              </p>
+            </Card>
           </div>
-        </div>
 
-        {/* Quick Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-          <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-indigo-50/30">
-            <div className="flex items-center gap-2 mb-1">
-              <FileText className="w-4 h-4 text-indigo-500" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Today
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {complaintStats.todayComplaints}
-            </p>
-          </Card>
-
-          <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-violet-50/30">
-            <div className="flex items-center gap-2 mb-1">
-              <Calendar className="w-4 h-4 text-violet-500" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                This Week
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {complaintStats.thisWeekComplaints}
-            </p>
-          </Card>
-
-          <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-pink-50/30">
-            <div className="flex items-center gap-2 mb-1">
-              <Activity className="w-4 h-4 text-pink-500" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                This Month
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {complaintStats.thisMonthComplaints}
-            </p>
-          </Card>
-
-          <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-amber-50/30">
-            <div className="flex items-center gap-2 mb-1">
-              <Eye className="w-4 h-4 text-amber-500" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Anonymous
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {complaintStats.anonymous}
-            </p>
-          </Card>
-
-          <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-emerald-50/30">
-            <div className="flex items-center gap-2 mb-1">
-              <Timer className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Avg Resolution
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {complaintStats.avgResolutionDays}d
-            </p>
-          </Card>
-
-          <Card className="p-4 border-gray-100 bg-gradient-to-br from-white to-cyan-50/30">
-            <div className="flex items-center gap-2 mb-1">
-              <UserCheck className="w-4 h-4 text-cyan-500" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Per User
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {systemStats.complaintPerUser}
-            </p>
-          </Card>
-        </div>
-
-        {/* Main Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-5 border-gray-100 bg-gradient-to-br from-white to-indigo-50/30 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Total Complaints
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {complaintStats.total}
-                </p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                <FileText className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-1 text-xs">
-              {complaintStats.recentTrend === "up" ? (
-                <>
-                  <TrendingUp className="w-3 h-3 text-rose-500" />
-                  <span className="text-rose-600 font-medium">
-                    +{complaintStats.trendPercentage}%
-                  </span>
-                </>
-              ) : complaintStats.recentTrend === "down" ? (
-                <>
-                  <TrendingDown className="w-3 h-3 text-emerald-500" />
-                  <span className="text-emerald-600 font-medium">
-                    {complaintStats.trendPercentage}%
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Activity className="w-3 h-3 text-gray-400" />
-                  <span className="text-gray-500 font-medium">Stable</span>
-                </>
-              )}
-              <span className="text-gray-400 ml-1">vs last month</span>
-            </div>
-          </Card>
-
-          <Card className="p-5 border-gray-100 bg-gradient-to-br from-white to-emerald-50/30 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Resolution Rate
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {complaintStats.resolutionRate}%
-                </p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500"
-                  style={{ width: `${complaintStats.resolutionRate}%` }}
-                />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-5 border-gray-100 bg-gradient-to-br from-white to-amber-50/30 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Pending
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {complaintStats.pending}
-                </p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
-                <Clock className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-2 text-xs">
-              <span className="text-blue-600 font-medium">
-                {complaintStats.processing} processing
-              </span>
-              <span className="text-gray-300">|</span>
-              <span className="text-rose-600 font-medium">
-                {complaintStats.rejected} rejected
-              </span>
-            </div>
-          </Card>
-
-          <Card className="p-5 border-gray-100 bg-gradient-to-br from-white to-violet-50/30 hover:shadow-lg transition-all duration-300">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Total Users
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {systemStats.totalUsers}
-                </p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center">
-                <Users className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-1 text-xs">
-              <span className="text-emerald-600 font-medium">
-                +{systemStats.newUsersThisWeek} this week
-              </span>
-              <span className="text-gray-400">•</span>
-              <span className="text-primary font-medium">
-                +{systemStats.newUsersThisMonth} this month
-              </span>
-            </div>
-          </Card>
-        </div>
-
-        {/* Key Insights */}
-        <Card className="p-5 border-gray-100 bg-gradient-to-r from-primary/5 to-violet-500/5">
-          <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-primary" />
-            Key Insights
-          </h3>
+          {/* Main Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-3 rounded-lg bg-white border border-gray-100">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                Peak Day
-              </p>
-              <p className="font-semibold text-foreground">
-                {complaintStats.peakDay || "N/A"}
-              </p>
-            </div>
-            <div className="p-3 rounded-lg bg-white border border-gray-100">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                Peak Hour
-              </p>
-              <p className="font-semibold text-foreground">
-                {complaintStats.peakHour || "N/A"}
-              </p>
-            </div>
-            <div className="p-3 rounded-lg bg-white border border-gray-100">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                Most Active Area
-              </p>
-              <p className="font-semibold text-foreground truncate">
-                {complaintStats.mostActiveBarangay || "N/A"}
-              </p>
-            </div>
-            <div className="p-3 rounded-lg bg-white border border-gray-100">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                Top Category
-              </p>
-              <p className="font-semibold text-foreground truncate">
-                {complaintStats.mostCommonCategory || "N/A"}
-              </p>
-            </div>
-          </div>
-        </Card>
+            <Card className="p-5 border-gray-100 bg-gradient-to-br from-white to-indigo-50/30 hover:shadow-lg transition-all duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Total Complaints
+                  </p>
+                  <p className="text-2xl font-bold text-foreground mt-1">
+                    {complaintStats.total}
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                  <FileText className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1 text-xs">
+                {complaintStats.recentTrend === "up" ? (
+                  <>
+                    <TrendingUp className="w-3 h-3 text-rose-500" />
+                    <span className="text-rose-600 font-medium">
+                      +{complaintStats.trendPercentage}%
+                    </span>
+                  </>
+                ) : complaintStats.recentTrend === "down" ? (
+                  <>
+                    <TrendingDown className="w-3 h-3 text-emerald-500" />
+                    <span className="text-emerald-600 font-medium">
+                      {complaintStats.trendPercentage}%
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Activity className="w-3 h-3 text-gray-400" />
+                    <span className="text-gray-500 font-medium">Stable</span>
+                  </>
+                )}
+                <span className="text-gray-400 ml-1">vs last month</span>
+              </div>
+            </Card>
 
-        {/* Charts Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Monthly Trend Chart */}
-          <Card className="p-5 border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <Activity className="w-4 h-4 text-primary" />
-                12-Month Complaint Trend
-              </h3>
-            </div>
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={complaintStats.byMonth}>
-                  <defs>
-                    <linearGradient
-                      id="colorComplaints"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fill: "#64748b", fontSize: 10 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
+            <Card className="p-5 border-gray-100 bg-gradient-to-br from-white to-emerald-50/30 hover:shadow-lg transition-all duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Resolution Rate
+                  </p>
+                  <p className="text-2xl font-bold text-foreground mt-1">
+                    {complaintStats.resolutionRate}%
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500"
+                    style={{ width: `${complaintStats.resolutionRate}%` }}
                   />
-                  <YAxis
-                    tick={{ fill: "#64748b", fontSize: 10 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                    }}
-                  />
-                  <Legend />
-                  <Area
-                    type="monotone"
-                    dataKey="complaints"
-                    stroke="#6366f1"
-                    strokeWidth={2}
-                    fill="url(#colorComplaints)"
-                    name="Total"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="solved"
-                    stroke="#22c55e"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    name="Solved"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="pending"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    name="Pending"
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-5 border-gray-100 bg-gradient-to-br from-white to-amber-50/30 hover:shadow-lg transition-all duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Pending
+                  </p>
+                  <p className="text-2xl font-bold text-foreground mt-1">
+                    {complaintStats.pending}
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <Clock className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-xs">
+                <span className="text-blue-600 font-medium">
+                  {complaintStats.processing} processing
+                </span>
+                <span className="text-gray-300">|</span>
+                <span className="text-rose-600 font-medium">
+                  {complaintStats.rejected} rejected
+                </span>
+              </div>
+            </Card>
+
+            <Card className="p-5 border-gray-100 bg-gradient-to-br from-white to-violet-50/30 hover:shadow-lg transition-all duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Total Users
+                  </p>
+                  <p className="text-2xl font-bold text-foreground mt-1">
+                    {systemStats.totalUsers}
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center">
+                  <Users className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1 text-xs">
+                <span className="text-emerald-600 font-medium">
+                  +{systemStats.newUsersThisWeek} this week
+                </span>
+                <span className="text-gray-400">•</span>
+                <span className="text-primary font-medium">
+                  +{systemStats.newUsersThisMonth} this month
+                </span>
+              </div>
+            </Card>
+          </div>
+
+          {/* Key Insights */}
+          <Card className="p-5 border-gray-100 bg-gradient-to-r from-primary/5 to-violet-500/5">
+            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" />
+              Key Insights
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-3 rounded-lg bg-white border border-gray-100">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                  Peak Day
+                </p>
+                <p className="font-semibold text-foreground">
+                  {complaintStats.peakDay || "N/A"}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-white border border-gray-100">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                  Peak Hour
+                </p>
+                <p className="font-semibold text-foreground">
+                  {complaintStats.peakHour || "N/A"}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-white border border-gray-100">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                  Most Active Area
+                </p>
+                <p className="font-semibold text-foreground truncate">
+                  {complaintStats.mostActiveBarangay || "N/A"}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-white border border-gray-100">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                  Top Category
+                </p>
+                <p className="font-semibold text-foreground truncate">
+                  {complaintStats.mostCommonCategory || "N/A"}
+                </p>
+              </div>
             </div>
           </Card>
 
-          {/* Status Distribution Pie Chart */}
-          <Card className="p-5 border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <PieChartIcon className="w-4 h-4 text-primary" />
-                Status Distribution
-              </h3>
-            </div>
-            <div className="h-[280px] flex items-center">
-              <div className="flex-1">
-                <ResponsiveContainer width="100%" height={250}>
+          {/* Charts Row 1 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Monthly Trend Chart */}
+            <Card className="p-5 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  12-Month Complaint Trend
+                </h3>
+              </div>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={complaintStats.byMonth}>
+                    <defs>
+                      <linearGradient
+                        id="colorComplaints"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#6366f1"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#6366f1"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: "#64748b", fontSize: 10 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 10 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                      }}
+                    />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="complaints"
+                      stroke="#6366f1"
+                      strokeWidth={2}
+                      fill="url(#colorComplaints)"
+                      name="Total"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="solved"
+                      stroke="#22c55e"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      name="Solved"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="pending"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      name="Pending"
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            {/* Status Distribution Pie Chart */}
+            <Card className="p-5 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <PieChartIcon className="w-4 h-4 text-primary" />
+                  Status Distribution
+                </h3>
+              </div>
+              <div className="h-[280px] flex items-center">
+                <div className="flex-1">
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={statusData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={85}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {statusData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "white",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "8px",
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-2 pr-4 min-w-[120px]">
+                  {statusData.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {item.name}
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold">
+                        {item.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Charts Row 2 - Day & Hour Analysis */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Day of Week Analysis */}
+            <Card className="p-5 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  Complaints by Day of Week
+                </h3>
+              </div>
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={complaintStats.byDayOfWeek}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Bar
+                      dataKey="value"
+                      fill="#8b5cf6"
+                      radius={[4, 4, 0, 0]}
+                      name="Complaints"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            {/* Hour Analysis */}
+            <Card className="p-5 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary" />
+                  Complaints by Hour (24h)
+                </h3>
+              </div>
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={complaintStats.byHour}>
+                    <defs>
+                      <linearGradient
+                        id="colorHour"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#06b6d4"
+                          stopOpacity={0.4}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#06b6d4"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="hour"
+                      tick={{ fill: "#64748b", fontSize: 9 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                      interval={2}
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#06b6d4"
+                      strokeWidth={2}
+                      fill="url(#colorHour)"
+                      name="Complaints"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          </div>
+
+          {/* Charts Row 3 - Category & Barangay */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Category Distribution */}
+            <Card className="p-5 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary" />
+                  Complaints by Category
+                </h3>
+              </div>
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={complaintStats.byCategory}
+                    layout="vertical"
+                    margin={{ left: 100 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      type="number"
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                      width={95}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Legend />
+                    <Bar
+                      dataKey="value"
+                      fill="#6366f1"
+                      radius={[0, 4, 4, 0]}
+                      name="Total"
+                    />
+                    <Bar
+                      dataKey="pending"
+                      fill="#f59e0b"
+                      radius={[0, 4, 4, 0]}
+                      name="Pending"
+                    />
+                    <Bar
+                      dataKey="solved"
+                      fill="#22c55e"
+                      radius={[0, 4, 4, 0]}
+                      name="Solved"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            {/* Barangay Distribution */}
+            <Card className="p-5 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-primary" />
+                  Top Barangays by Complaints
+                </h3>
+              </div>
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={complaintStats.byBarangay}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: "#64748b", fontSize: 9 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Legend />
+                    <Bar
+                      dataKey="pending"
+                      stackId="a"
+                      fill="#f59e0b"
+                      name="Pending"
+                    />
+                    <Bar
+                      dataKey="processing"
+                      stackId="a"
+                      fill="#3b82f6"
+                      name="Processing"
+                    />
+                    <Bar
+                      dataKey="solved"
+                      stackId="a"
+                      fill="#22c55e"
+                      name="Solved"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          </div>
+
+          {/* User Demographics */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Gender Distribution */}
+            <Card className="p-5 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" />
+                  User Gender Distribution
+                </h3>
+              </div>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={statusData}
+                      data={userDemographics.byGender}
                       cx="50%"
                       cy="50%"
-                      innerRadius={55}
-                      outerRadius={85}
-                      paddingAngle={3}
+                      outerRadius={70}
                       dataKey="value"
+                      label={({ name, percent }) =>
+                        `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                      }
+                      labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
                     >
-                      {statusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      {userDemographics.byGender.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                        />
                       ))}
                     </Pie>
                     <Tooltip
@@ -997,477 +1360,369 @@ export default function AdminStatisticsPage() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-2 pr-4 min-w-[120px]">
-                {statusData.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between gap-3"
+            </Card>
+
+            {/* Users by Barangay */}
+            <Card className="p-5 border-gray-100 lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-primary" />
+                  Users by Barangay (Top 10)
+                </h3>
+              </div>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={userDemographics.byBarangay}
+                    layout="vertical"
+                    margin={{ left: 100 }}
                   >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        {item.name}
-                      </span>
-                    </div>
-                    <span className="text-xs font-semibold">{item.value}</span>
-                  </div>
-                ))}
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      type="number"
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fill: "#64748b", fontSize: 10 }}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                      width={95}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Bar
+                      dataKey="value"
+                      fill="#8b5cf6"
+                      radius={[0, 4, 4, 0]}
+                      name="Users"
+                    >
+                      {userDemographics.byBarangay.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={`rgba(139, 92, 246, ${1 - index * 0.08})`}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* Charts Row 2 - Day & Hour Analysis */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Day of Week Analysis */}
-          <Card className="p-5 border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-primary" />
-                Complaints by Day of Week
-              </h3>
-            </div>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={complaintStats.byDayOfWeek}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fill: "#64748b", fontSize: 11 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <YAxis
-                    tick={{ fill: "#64748b", fontSize: 11 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Bar
-                    dataKey="value"
-                    fill="#8b5cf6"
-                    radius={[4, 4, 0, 0]}
-                    name="Complaints"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          {/* Hour Analysis */}
-          <Card className="p-5 border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <Clock className="w-4 h-4 text-primary" />
-                Complaints by Hour (24h)
-              </h3>
-            </div>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={complaintStats.byHour}>
-                  <defs>
-                    <linearGradient id="colorHour" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="hour"
-                    tick={{ fill: "#64748b", fontSize: 9 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                    interval={2}
-                  />
-                  <YAxis
-                    tick={{ fill: "#64748b", fontSize: 11 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#06b6d4"
-                    strokeWidth={2}
-                    fill="url(#colorHour)"
-                    name="Complaints"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </div>
-
-        {/* Charts Row 3 - Category & Barangay */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Category Distribution */}
-          <Card className="p-5 border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <Layers className="w-4 h-4 text-primary" />
-                Complaints by Category
-              </h3>
-            </div>
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={complaintStats.byCategory}
-                  layout="vertical"
-                  margin={{ left: 100 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: "#64748b", fontSize: 11 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    tick={{ fill: "#64748b", fontSize: 11 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                    width={95}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Legend />
-                  <Bar
-                    dataKey="value"
-                    fill="#6366f1"
-                    radius={[0, 4, 4, 0]}
-                    name="Total"
-                  />
-                  <Bar
-                    dataKey="pending"
-                    fill="#f59e0b"
-                    radius={[0, 4, 4, 0]}
-                    name="Pending"
-                  />
-                  <Bar
-                    dataKey="solved"
-                    fill="#22c55e"
-                    radius={[0, 4, 4, 0]}
-                    name="Solved"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          {/* Barangay Distribution */}
-          <Card className="p-5 border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" />
-                Top Barangays by Complaints
-              </h3>
-            </div>
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={complaintStats.byBarangay}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fill: "#64748b", fontSize: 9 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis
-                    tick={{ fill: "#64748b", fontSize: 11 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Legend />
-                  <Bar
-                    dataKey="pending"
-                    stackId="a"
-                    fill="#f59e0b"
-                    name="Pending"
-                  />
-                  <Bar
-                    dataKey="processing"
-                    stackId="a"
-                    fill="#3b82f6"
-                    name="Processing"
-                  />
-                  <Bar
-                    dataKey="solved"
-                    stackId="a"
-                    fill="#22c55e"
-                    name="Solved"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </div>
-
-        {/* User Demographics */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Gender Distribution */}
-          <Card className="p-5 border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <Users className="w-4 h-4 text-primary" />
-                User Gender Distribution
-              </h3>
-            </div>
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={userDemographics.byGender}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    dataKey="value"
-                    label={({ name, percent }) =>
-                      `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                    }
-                    labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
-                  >
-                    {userDemographics.byGender.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "8px",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          {/* Users by Barangay */}
-          <Card className="p-5 border-gray-100 lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" />
-                Users by Barangay (Top 10)
-              </h3>
-            </div>
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={userDemographics.byBarangay}
-                  layout="vertical"
-                  margin={{ left: 100 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: "#64748b", fontSize: 11 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    tick={{ fill: "#64748b", fontSize: 10 }}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                    width={95}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Bar
-                    dataKey="value"
-                    fill="#8b5cf6"
-                    radius={[0, 4, 4, 0]}
-                    name="Users"
-                  >
-                    {userDemographics.byBarangay.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={`rgba(139, 92, 246, ${1 - index * 0.08})`}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </div>
-
-        {/* System Resources */}
-        <Card className="p-5 border-gray-100">
-          <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-primary" />
-            Platform Resources
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                  <Building2 className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-emerald-700">
-                    {systemStats.totalAgencies}
-                  </p>
-                  <p className="text-xs text-emerald-600/70">Agencies</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-gradient-to-br from-rose-50 to-rose-100/50 border border-rose-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-rose-500/10 flex items-center justify-center">
-                  <Phone className="w-5 h-5 text-rose-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-rose-700">
-                    {systemStats.totalHotlines}
-                  </p>
-                  <p className="text-xs text-rose-600/70">Hotlines</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                  <Newspaper className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-blue-700">
-                    {systemStats.totalArticles}
-                  </p>
-                  <p className="text-xs text-blue-600/70">Articles</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-gradient-to-br from-violet-50 to-violet-100/50 border border-violet-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-violet-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-violet-700">
-                    {systemStats.totalUsers}
-                  </p>
-                  <p className="text-xs text-violet-600/70">Users</p>
-                </div>
-              </div>
-            </div>
+            </Card>
           </div>
-        </Card>
 
-        {/* Action Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="p-4 border-gray-100 bg-gradient-to-r from-amber-50 to-amber-100/30">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+          {/* System Resources */}
+          <Card className="p-5 border-gray-100">
+            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-primary" />
+              Platform Resources
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <Building2 className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-emerald-700">
+                      {systemStats.totalAgencies}
+                    </p>
+                    <p className="text-xs text-emerald-600/70">Agencies</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h4 className="font-medium text-amber-900 text-sm">
-                  Needs Attention
-                </h4>
-                <p className="text-xs text-amber-700/70 mt-0.5">
-                  {complaintStats.pending} complaints awaiting review
-                </p>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="mt-2 h-7 text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-100 px-2"
-                  onClick={() =>
-                    router.push("/admin/complaints?status=pending")
-                  }
-                >
-                  View Pending →
-                </Button>
+
+              <div className="p-4 rounded-xl bg-gradient-to-br from-rose-50 to-rose-100/50 border border-rose-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-rose-500/10 flex items-center justify-center">
+                    <Phone className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-rose-700">
+                      {systemStats.totalHotlines}
+                    </p>
+                    <p className="text-xs text-rose-600/70">Hotlines</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                    <Newspaper className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-blue-700">
+                      {systemStats.totalArticles}
+                    </p>
+                    <p className="text-xs text-blue-600/70">Articles</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gradient-to-br from-violet-50 to-violet-100/50 border border-violet-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-violet-700">
+                      {systemStats.totalUsers}
+                    </p>
+                    <p className="text-xs text-violet-600/70">Users</p>
+                  </div>
+                </div>
               </div>
             </div>
           </Card>
 
-          <Card className="p-4 border-gray-100 bg-gradient-to-r from-blue-50 to-blue-100/30">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                <Activity className="w-4.5 h-4.5 text-blue-600" />
+          {/* Action Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="p-4 border-gray-100 bg-gradient-to-r from-amber-50 to-amber-100/30">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-amber-900 text-sm">
+                    Needs Attention
+                  </h4>
+                  <p className="text-xs text-amber-700/70 mt-0.5">
+                    {complaintStats.pending} complaints awaiting review
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="mt-2 h-7 text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-100 px-2"
+                    onClick={() =>
+                      router.push("/admin/complaints?status=pending")
+                    }
+                  >
+                    View Pending →
+                  </Button>
+                </div>
               </div>
-              <div>
-                <h4 className="font-medium text-blue-900 text-sm">
-                  In Progress
-                </h4>
-                <p className="text-xs text-blue-700/70 mt-0.5">
-                  {complaintStats.processing} complaints being processed
-                </p>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="mt-2 h-7 text-xs text-blue-700 hover:text-blue-900 hover:bg-blue-100 px-2"
-                  onClick={() =>
-                    router.push("/admin/complaints?status=processing")
-                  }
-                >
-                  View Processing →
-                </Button>
-              </div>
-            </div>
-          </Card>
+            </Card>
 
-          <Card className="p-4 border-gray-100 bg-gradient-to-r from-emerald-50 to-emerald-100/30">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                <Award className="w-4.5 h-4.5 text-emerald-600" />
+            <Card className="p-4 border-gray-100 bg-gradient-to-r from-blue-50 to-blue-100/30">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <Activity className="w-4.5 h-4.5 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-blue-900 text-sm">
+                    In Progress
+                  </h4>
+                  <p className="text-xs text-blue-700/70 mt-0.5">
+                    {complaintStats.processing} complaints being processed
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="mt-2 h-7 text-xs text-blue-700 hover:text-blue-900 hover:bg-blue-100 px-2"
+                    onClick={() =>
+                      router.push("/admin/complaints?status=processing")
+                    }
+                  >
+                    View Processing →
+                  </Button>
+                </div>
               </div>
-              <div>
-                <h4 className="font-medium text-emerald-900 text-sm">
-                  Resolved
-                </h4>
-                <p className="text-xs text-emerald-700/70 mt-0.5">
-                  {complaintStats.solved} complaints successfully resolved
-                </p>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="mt-2 h-7 text-xs text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100 px-2"
-                  onClick={() => router.push("/admin/complaints?status=solved")}
-                >
-                  View Resolved →
-                </Button>
+            </Card>
+
+            <Card className="p-4 border-gray-100 bg-gradient-to-r from-emerald-50 to-emerald-100/30">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                  <Award className="w-4.5 h-4.5 text-emerald-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-emerald-900 text-sm">
+                    Resolved
+                  </h4>
+                  <p className="text-xs text-emerald-700/70 mt-0.5">
+                    {complaintStats.solved} complaints successfully resolved
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="mt-2 h-7 text-xs text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100 px-2"
+                    onClick={() =>
+                      router.push("/admin/complaints?status=solved")
+                    }
+                  >
+                    View Resolved →
+                  </Button>
+                </div>
               </div>
+            </Card>
+          </div>
+
+          {/* Maintenance & Danger Zone */}
+          <div className="mt-12 mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertOctagon className="w-5 h-5 text-rose-500" />
+              <h2 className="text-xl font-bold text-foreground">
+                Maintenance & Danger Zone
+              </h2>
             </div>
-          </Card>
-        </div>
+
+            <Card className="border-rose-100 bg-rose-50/20 overflow-hidden">
+              <div className="p-6">
+                <p className="text-sm text-muted-foreground mb-6">
+                  Administrative tools to manage system data. Use these with
+                  extreme caution as they perform permanent destructive actions.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-4 bg-white rounded-xl border border-rose-100/50 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-semibold text-rose-900 text-sm mb-1">
+                        Complaints Data
+                      </h3>
+                      <p className="text-xs text-rose-700/70 mb-4">
+                        Clear all user reports, comments, and reactions.
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full bg-rose-500 hover:bg-rose-600"
+                      disabled={isDeleting !== null}
+                      onClick={() =>
+                        handleClearTable(
+                          "complaints",
+                          "complaints, reactions, and comments"
+                        )
+                      }
+                    >
+                      {isDeleting === "complaints" ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />
+                      )}
+                      Clear Complaints
+                    </Button>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-xl border border-rose-100/50 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-semibold text-rose-900 text-sm mb-1">
+                        Articles Data
+                      </h3>
+                      <p className="text-xs text-rose-700/70 mb-4">
+                        Wipe all news and informative articles from the
+                        platform.
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full bg-rose-500 hover:bg-rose-600"
+                      disabled={isDeleting !== null}
+                      onClick={() => handleClearTable("articles", "articles")}
+                    >
+                      {isDeleting === "articles" ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />
+                      )}
+                      Clear Articles
+                    </Button>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-xl border border-rose-100/50 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-semibold text-rose-900 text-sm mb-1">
+                        Agencies Data
+                      </h3>
+                      <p className="text-xs text-rose-700/70 mb-4">
+                        Remove all registered government agencies.
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full bg-rose-500 hover:bg-rose-600"
+                      disabled={isDeleting !== null}
+                      onClick={() => handleClearTable("agencies", "agencies")}
+                    >
+                      {isDeleting === "agencies" ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />
+                      )}
+                      Clear Agencies
+                    </Button>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-xl border border-rose-100/50 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-semibold text-rose-900 text-sm mb-1">
+                        Hotlines Data
+                      </h3>
+                      <p className="text-xs text-rose-700/70 mb-4">
+                        Delete all emergency contact numbers and hotlines.
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full bg-rose-500 hover:bg-rose-600"
+                      disabled={isDeleting !== null}
+                      onClick={() =>
+                        handleClearTable(
+                          "emergency_hotlines",
+                          "emergency hotlines"
+                        )
+                      }
+                    >
+                      {isDeleting === "emergency_hotlines" ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />
+                      )}
+                      Clear Hotlines
+                    </Button>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-xl border border-rose-100/50 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-semibold text-rose-900 text-sm mb-1">
+                        User Profiles
+                      </h3>
+                      <p className="text-xs text-rose-700/70 mb-4">
+                        Wipe all user accounts except for administrators.
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full bg-rose-500 hover:bg-rose-600"
+                      disabled={isDeleting !== null}
+                      onClick={() =>
+                        handleClearTable(
+                          "profiles_non_admin",
+                          "non-admin user profiles"
+                        )
+                      }
+                    >
+                      {isDeleting === "profiles_non_admin" ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />
+                      )}
+                      Clear Users
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
         </div>
       </main>
     </div>
