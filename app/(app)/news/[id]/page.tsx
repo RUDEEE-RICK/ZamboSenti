@@ -6,8 +6,10 @@ import { AppHeader } from "@/components/app-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Dialog } from "@/components/ui/dialog";
 import {
   ArrowLeft,
   AlertCircle,
@@ -22,6 +24,11 @@ import {
   Send,
   MapPin,
   Newspaper,
+  Edit2,
+  Check,
+  X,
+  Camera,
+  Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
@@ -75,7 +82,10 @@ interface StatusUpdate {
 const STATUS_CONFIG: Record<string, { color: string; bgColor: string }> = {
   pending: { color: "text-amber-700", bgColor: "bg-amber-50 border-amber-200" },
   processing: { color: "text-blue-700", bgColor: "bg-blue-50 border-blue-200" },
-  solved: { color: "text-emerald-700", bgColor: "bg-emerald-50 border-emerald-200" },
+  solved: {
+    color: "text-emerald-700",
+    bgColor: "bg-emerald-50 border-emerald-200",
+  },
   rejected: { color: "text-rose-700", bgColor: "bg-rose-50 border-rose-200" },
 };
 
@@ -95,12 +105,42 @@ export default function ContentDetailPage() {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Admin edit state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    title: "",
+    content: "",
+    imageFile: null as File | null,
+    imagePreview: null as string | null,
+  });
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isDeletingArticle, setIsDeletingArticle] = useState(false);
+
   useEffect(() => {
     if (contentId) {
       fetchContentDetails();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentId]);
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
+      const supabase = createClient();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("user_roles")
+        .eq("id", user.id)
+        .single();
+      setIsAdmin(profile?.user_roles === "admin");
+    };
+    checkAdminStatus();
+  }, [user]);
 
   const fetchContentDetails = async () => {
     const supabase = createClient();
@@ -118,10 +158,11 @@ export default function ContentDetailPage() {
           content,
           created_at,
           view_count,
+          image_url,
           profiles:user_id (
             name
           )
-        `
+        `,
         )
         .eq("id", contentId)
         .is("deleted_at", null)
@@ -144,24 +185,9 @@ export default function ContentDetailPage() {
           article_id: contentId,
         });
 
-        // Fetch article images
-        const { data: pictureLinks, error: pictureError } = await supabase
-          .from("article_pictures")
-          .select(
-            `
-            pictures:picture_id (
-              image_path
-            )
-          `
-          )
-          .eq("article_id", contentId);
-
-        if (!pictureError && pictureLinks) {
-          const imageUrls = pictureLinks
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .map((link: any) => link.pictures?.image_path)
-            .filter(Boolean);
-          setImages(imageUrls);
+        // Set image from image_url directly
+        if (articleData.image_url) {
+          setImages([articleData.image_url]);
         }
 
         // Fetch article reactions
@@ -185,7 +211,7 @@ export default function ContentDetailPage() {
             profiles:user_id (
               name
             )
-          `
+          `,
           )
           .eq("article_id", contentId)
           .order("created_at", { ascending: false });
@@ -201,7 +227,7 @@ export default function ContentDetailPage() {
               profiles: Array.isArray(comment.profiles)
                 ? comment.profiles[0]
                 : comment.profiles,
-            }))
+            })),
           );
         }
       } else {
@@ -225,7 +251,7 @@ export default function ContentDetailPage() {
             profiles:user_id (
               name
             )
-          `
+          `,
           )
           .eq("id", contentId)
           .eq("is_public", true)
@@ -284,7 +310,7 @@ export default function ContentDetailPage() {
               profiles:user_id (
                 name
               )
-            `
+            `,
             )
             .eq("complaint_id", contentId)
             .order("created_at", { ascending: false });
@@ -301,7 +327,7 @@ export default function ContentDetailPage() {
                 profiles: Array.isArray(comment.profiles)
                   ? comment.profiles[0]
                   : comment.profiles,
-              }))
+              })),
             );
           }
         } else {
@@ -326,8 +352,12 @@ export default function ContentDetailPage() {
 
     const supabase = createClient();
 
-    const table = content.content_type === "article" ? "article_reactions" : "complaint_reactions";
-    const idColumn = content.content_type === "article" ? "article_id" : "complaint_id";
+    const table =
+      content.content_type === "article"
+        ? "article_reactions"
+        : "complaint_reactions";
+    const idColumn =
+      content.content_type === "article" ? "article_id" : "complaint_id";
 
     const existingReaction = reactions.find((r) => r.user_id === user.id);
 
@@ -336,26 +366,28 @@ export default function ContentDetailPage() {
         if (existingReaction.reaction_type === reactionType) {
           // Remove reaction - optimistic update
           setReactions(reactions.filter((r) => r.id !== existingReaction.id));
-          
+
           const { error } = await supabase
             .from(table)
             .delete()
             .eq("id", existingReaction.id);
-          
+
           if (error) throw error;
         } else {
           // Update reaction type - optimistic update
-          setReactions(reactions.map((r) => 
-            r.id === existingReaction.id 
-              ? { ...r, reaction_type: reactionType }
-              : r
-          ));
-          
+          setReactions(
+            reactions.map((r) =>
+              r.id === existingReaction.id
+                ? { ...r, reaction_type: reactionType }
+                : r,
+            ),
+          );
+
           const { error } = await supabase
             .from(table)
             .update({ reaction_type: reactionType })
             .eq("id", existingReaction.id);
-          
+
           if (error) throw error;
         }
       } else {
@@ -366,19 +398,22 @@ export default function ContentDetailPage() {
           reaction_type: reactionType,
         };
         setReactions([...reactions, tempReaction]);
-        
-        const { data, error } = await supabase.from(table).insert({
-          [idColumn]: contentId,
-          user_id: user.id,
-          reaction_type: reactionType,
-        }).select();
-        
+
+        const { data, error } = await supabase
+          .from(table)
+          .insert({
+            [idColumn]: contentId,
+            user_id: user.id,
+            reaction_type: reactionType,
+          })
+          .select();
+
         if (error) throw error;
-        
+
         // Replace temp reaction with real one
         if (data && data[0]) {
-          setReactions(prev => 
-            prev.map(r => r.id === tempReaction.id ? data[0] : r)
+          setReactions((prev) =>
+            prev.map((r) => (r.id === tempReaction.id ? data[0] : r)),
           );
         }
       }
@@ -404,8 +439,12 @@ export default function ContentDetailPage() {
     setIsSubmittingComment(true);
     const supabase = createClient();
 
-    const table = content.content_type === "article" ? "article_comments" : "complaint_comments";
-    const idColumn = content.content_type === "article" ? "article_id" : "complaint_id";
+    const table =
+      content.content_type === "article"
+        ? "article_comments"
+        : "complaint_comments";
+    const idColumn =
+      content.content_type === "article" ? "article_id" : "complaint_id";
 
     try {
       const { data: newCommentData, error } = await supabase
@@ -435,7 +474,7 @@ export default function ContentDetailPage() {
           created_at: newCommentData.created_at,
           profiles: profileData || { name: "User" },
         };
-        
+
         setComments([newComment, ...comments]);
       }
 
@@ -448,10 +487,151 @@ export default function ContentDetailPage() {
     }
   };
 
+  const handleOpenEditModal = () => {
+    if (content && content.content_type === "article") {
+      setEditFormData({
+        title: content.title,
+        content: content.content,
+        imageFile: null,
+        imagePreview: images[0] || null,
+      });
+      setEditError(null);
+      setShowEditModal(true);
+    }
+  };
+
+  const handleEditImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        setEditError("Image must be less than 10MB");
+        return;
+      }
+      if (!file.type.startsWith("image/")) {
+        setEditError("File must be an image");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditFormData((prev) => ({
+          ...prev,
+          imageFile: file,
+          imagePreview: reader.result as string,
+        }));
+      };
+      reader.readAsDataURL(file);
+      setEditError(null);
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content || content.content_type !== "article" || !user) return;
+
+    setIsSubmittingEdit(true);
+    setEditError(null);
+
+    const supabase = createClient();
+
+    try {
+      let imageUrl: string | null = null;
+
+      // Upload new image if provided
+      if (editFormData.imageFile) {
+        const fileExt = editFormData.imageFile.name.split(".").pop();
+        const fileName = `${Date.now()}${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("article-images")
+          .upload(fileName, editFormData.imageFile);
+
+        if (!uploadError) {
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("article-images").getPublicUrl(fileName);
+          imageUrl = publicUrl;
+        }
+      }
+
+      // Build update payload
+      const updatePayload: Record<string, unknown> = {
+        title: editFormData.title.trim(),
+        content: editFormData.content.trim(),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Add image_url if we have a new one
+      if (imageUrl) {
+        updatePayload.image_url = imageUrl;
+      }
+
+      // Update article with image_url
+      const { error: updateError } = await supabase
+        .from("articles")
+        .update(updatePayload)
+        .eq("id", contentId);
+
+      if (updateError) throw updateError;
+
+      console.log("✅ Article updated");
+
+      // Refresh content
+      setShowEditModal(false);
+      await fetchContentDetails();
+    } catch (err) {
+      console.error("Error updating article:", err);
+      setEditError(
+        err instanceof Error ? err.message : "Failed to update article",
+      );
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  };
+
+  const handleEditCancel = () => {
+    setShowEditModal(false);
+    setEditError(null);
+  };
+
+  const handleDeleteArticle = async () => {
+    if (!content || content.content_type !== "article") return;
+
+    if (
+      !confirm(
+        "Are you sure you want to delete this article? This action cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    setIsDeletingArticle(true);
+    const supabase = createClient();
+
+    try {
+      // Soft delete by setting deleted_at
+      const { error: deleteError } = await supabase
+        .from("articles")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", contentId);
+
+      if (deleteError) throw deleteError;
+
+      // Redirect to news hub
+      router.push("/news");
+    } catch (err) {
+      console.error("Error deleting article:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete article");
+    } finally {
+      setIsDeletingArticle(false);
+    }
+  };
+
   const reactionCounts = {
     hearts: reactions.filter((r) => r.reaction_type === "heart").length,
     thumbs_up: reactions.filter((r) => r.reaction_type === "thumbs_up").length,
-    thumbs_down: reactions.filter((r) => r.reaction_type === "thumbs_down").length,
+    thumbs_down: reactions.filter((r) => r.reaction_type === "thumbs_down")
+      .length,
   };
 
   const userReaction = user
@@ -494,8 +674,8 @@ export default function ContentDetailPage() {
     );
   }
 
-  const authorName = content.is_anonymous 
-    ? "Anonymous" 
+  const authorName = content.is_anonymous
+    ? "Anonymous"
     : content.guest_name || content.profiles?.name || "Unknown";
 
   return (
@@ -518,7 +698,9 @@ export default function ContentDetailPage() {
             {/* Badges */}
             <div className="flex gap-2 flex-wrap">
               <Badge
-                variant={content.content_type === "article" ? "default" : "secondary"}
+                variant={
+                  content.content_type === "article" ? "default" : "secondary"
+                }
                 className="gap-1"
               >
                 {content.content_type === "article" ? (
@@ -542,10 +724,10 @@ export default function ContentDetailPage() {
                     content.status === "solved"
                       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                       : content.status === "processing"
-                      ? "bg-blue-50 text-blue-700 border-blue-200"
-                      : content.status === "rejected"
-                      ? "bg-rose-50 text-rose-700 border-rose-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : content.status === "rejected"
+                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : "bg-amber-50 text-amber-700 border-amber-200"
                   }
                 >
                   {content.status.replace("_", " ").toUpperCase()}
@@ -553,7 +735,37 @@ export default function ContentDetailPage() {
               )}
             </div>
 
-            <h1 className="text-3xl font-bold">{content.title}</h1>
+            <div className="flex items-start justify-between gap-4">
+              <h1 className="text-3xl font-bold">{content.title}</h1>
+              {isAdmin && content.content_type === "article" && (
+                <div className="flex gap-2 flex-shrink-0">
+                  <Button
+                    onClick={handleOpenEditModal}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button
+                    onClick={handleDeleteArticle}
+                    variant="outline"
+                    size="sm"
+                    disabled={isDeletingArticle}
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-200"
+                  >
+                    {isDeletingArticle ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
@@ -567,10 +779,12 @@ export default function ContentDetailPage() {
                 <Eye className="w-4 h-4" />
                 {content.view_count || 0} views
               </span>
-              <span className="flex items-center gap-2">
-                <User className="w-4 h-4" />
-                By {authorName}
-              </span>
+              {content.content_type === "complaint" && (
+                <span className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  By {authorName}
+                </span>
+              )}
               {content.barangay && (
                 <span className="flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
@@ -608,61 +822,80 @@ export default function ContentDetailPage() {
                   <MapPin className="w-4 h-4 mt-1 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium">Location</p>
-                    <p className="text-sm text-muted-foreground">{content.location}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {content.location}
+                    </p>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Status Updates for Complaints */}
-            {content.content_type === "complaint" && statusUpdates.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Admin Updates
-                </h3>
+            {content.content_type === "complaint" &&
+              statusUpdates.length > 0 && (
                 <div className="space-y-2">
-                  {statusUpdates.map((update) => {
-                    const config = STATUS_CONFIG[update.status] || STATUS_CONFIG.pending;
-                    return (
-                      <div key={update.id} className={`p-3 rounded-lg border ${config.bgColor}`}>
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <Badge variant="outline" className={`uppercase text-xs ${config.color} border-current`}>
-                            {update.status}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(update.created_at).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </span>
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Admin Updates
+                  </h3>
+                  <div className="space-y-2">
+                    {statusUpdates.map((update) => {
+                      const config =
+                        STATUS_CONFIG[update.status] || STATUS_CONFIG.pending;
+                      return (
+                        <div
+                          key={update.id}
+                          className={`p-3 rounded-lg border ${config.bgColor}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <Badge
+                              variant="outline"
+                              className={`uppercase text-xs ${config.color} border-current`}
+                            >
+                              {update.status}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(update.created_at).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                },
+                              )}
+                            </span>
+                          </div>
+                          {update.remarks && (
+                            <p className="text-sm text-foreground mb-2">
+                              {update.remarks}
+                            </p>
+                          )}
+                          {update.evidence_url && (
+                            <button
+                              onClick={() =>
+                                window.open(update.evidence_url!, "_blank")
+                              }
+                              className="relative w-32 h-20 rounded-md overflow-hidden bg-gray-100 border-2 border-gray-200 hover:border-primary transition-colors group"
+                            >
+                              <Image
+                                src={update.evidence_url}
+                                alt="Evidence"
+                                fill
+                                unoptimized
+                                className="object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                <span className="text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity font-medium">
+                                  View
+                                </span>
+                              </div>
+                            </button>
+                          )}
                         </div>
-                        {update.remarks && (
-                          <p className="text-sm text-foreground mb-2">{update.remarks}</p>
-                        )}
-                        {update.evidence_url && (
-                          <button
-                            onClick={() => window.open(update.evidence_url!, '_blank')}
-                            className="relative w-32 h-20 rounded-md overflow-hidden bg-gray-100 border-2 border-gray-200 hover:border-primary transition-colors group"
-                          >
-                            <Image
-                              src={update.evidence_url}
-                              alt="Evidence"
-                              fill
-                              unoptimized
-                              className="object-cover"
-                            />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                              <span className="text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity font-medium">View</span>
-                            </div>
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {/* Content */}
             <div className="prose prose-sm max-w-none">
@@ -697,7 +930,9 @@ export default function ContentDetailPage() {
                 <ThumbsUp
                   className={`w-6 h-6 ${userReaction === "thumbs_up" ? "fill-current" : ""}`}
                 />
-                <span className="font-semibold">{reactionCounts.thumbs_up}</span>
+                <span className="font-semibold">
+                  {reactionCounts.thumbs_up}
+                </span>
               </button>
               <button
                 onClick={() => handleReaction("thumbs_down")}
@@ -710,7 +945,9 @@ export default function ContentDetailPage() {
                 <ThumbsDown
                   className={`w-6 h-6 ${userReaction === "thumbs_down" ? "fill-current" : ""}`}
                 />
-                <span className="font-semibold">{reactionCounts.thumbs_down}</span>
+                <span className="font-semibold">
+                  {reactionCounts.thumbs_down}
+                </span>
               </button>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MessageSquare className="w-6 h-6" />
@@ -755,7 +992,10 @@ export default function ContentDetailPage() {
               <p className="text-sm text-muted-foreground mb-3">
                 Please login to comment
               </p>
-              <Button onClick={() => router.push("/auth/login")} variant="outline">
+              <Button
+                onClick={() => router.push("/auth/login")}
+                variant="outline"
+              >
                 Login
               </Button>
             </div>
@@ -771,11 +1011,21 @@ export default function ContentDetailPage() {
               {comments.map((comment) => {
                 console.log("Rendering comment:", comment);
                 const fullName = comment.profiles?.name || "Unknown User";
-                const firstName = fullName.split(' ')[0];
-                const initials = fullName.split(' ').filter(n => n).map(n => n[0]).join('').toUpperCase().slice(0, 2) || "U";
-                
+                const firstName = fullName.split(" ")[0];
+                const initials =
+                  fullName
+                    .split(" ")
+                    .filter((n) => n)
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                    .slice(0, 2) || "U";
+
                 return (
-                  <div key={comment.id} className="flex gap-3 p-4 bg-muted/50 rounded-lg">
+                  <div
+                    key={comment.id}
+                    className="flex gap-3 p-4 bg-muted/50 rounded-lg"
+                  >
                     <Avatar className="w-10 h-10 flex-shrink-0">
                       <AvatarFallback className="bg-primary text-primary-foreground">
                         <span className="text-sm font-semibold">
@@ -803,6 +1053,128 @@ export default function ContentDetailPage() {
           )}
         </Card>
       </div>
+
+      {/* Edit Article Modal */}
+      <Dialog
+        isOpen={showEditModal}
+        onClose={handleEditCancel}
+        title="Edit Article"
+        size="xl"
+      >
+        {editError && (
+          <div className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-rose-700">{editError}</p>
+          </div>
+        )}
+        <form onSubmit={handleEditSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Title *</label>
+            <Input
+              value={editFormData.title}
+              onChange={(e) =>
+                setEditFormData({ ...editFormData, title: e.target.value })
+              }
+              placeholder="Article title"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Content *</label>
+            <Textarea
+              value={editFormData.content}
+              onChange={(e) =>
+                setEditFormData({ ...editFormData, content: e.target.value })
+              }
+              placeholder="Write your article content here... (Markdown supported)"
+              rows={8}
+              required
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Tip: You can use Markdown formatting for rich content
+            </p>
+          </div>
+
+          {/* Image Upload */}
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Cover Image
+            </label>
+            <div className="mt-2">
+              {editFormData.imagePreview ? (
+                <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-100 group">
+                  <Image
+                    src={editFormData.imagePreview}
+                    alt="Preview"
+                    fill
+                    unoptimized
+                    className="object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <label className="bg-white text-gray-700 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer hover:bg-gray-100 transition-colors">
+                      Change Image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleEditImageChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center w-full h-32 rounded-xl border-2 border-dashed border-gray-200 hover:border-primary/50 hover:bg-gray-50 transition-all cursor-pointer">
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+                      <Camera className="w-5 h-5 text-primary" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      Click to upload image
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      Max 10MB
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleEditImageChange}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              type="submit"
+              disabled={isSubmittingEdit}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {isSubmittingEdit ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleEditCancel}
+              disabled={isSubmittingEdit}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Dialog>
     </div>
   );
 }
